@@ -1,6 +1,6 @@
 from datetime import date, time
 from typing import Optional
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, model_validator
 
 
 class SignupRequest(BaseModel):
@@ -14,6 +14,7 @@ class LoginRequest(BaseModel):
 
 
 class AlertProfileCreate(BaseModel):
+    course: Optional[str] = None   # singular accepted from frontend
     courses: list[str] = []
     date_from: date
     date_to: date
@@ -25,8 +26,15 @@ class AlertProfileCreate(BaseModel):
     notify_phone: Optional[str] = None
     active: bool = True
 
+    @model_validator(mode="after")
+    def coerce_course_to_courses(self):
+        if self.course and not self.courses:
+            self.courses = [self.course]
+        return self
+
 
 class AlertProfileUpdate(BaseModel):
+    course: Optional[str] = None   # singular accepted from frontend
     courses: Optional[list[str]] = None
     date_from: Optional[date] = None
     date_to: Optional[date] = None
@@ -37,6 +45,12 @@ class AlertProfileUpdate(BaseModel):
     notify_email: Optional[str] = None
     notify_phone: Optional[str] = None
     active: Optional[bool] = None
+
+    @model_validator(mode="after")
+    def coerce_course_to_courses(self):
+        if self.course and self.courses is None:
+            self.courses = [self.course]
+        return self
 
 
 class CheckoutSessionRequest(BaseModel):

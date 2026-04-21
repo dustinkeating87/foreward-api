@@ -44,7 +44,7 @@ def update_alert(alert_id: str, body: AlertProfileUpdate, ctx=Depends(get_curren
     if not existing.data:
         raise HTTPException(status_code=404, detail="Alert not found")
 
-    updates = body.model_dump(exclude_none=True)
+    updates = body.model_dump(exclude_none=True, exclude={"course"})
     if "date_from" in updates:
         updates["date_from"] = updates["date_from"].isoformat()
     if "date_to" in updates:
