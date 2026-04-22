@@ -79,26 +79,45 @@ def test_notification(
     body = "This is a test notification from Tee Sniper. Your alerts are working."
 
     if email:
-        smtp_host = os.environ.get("SMTP_HOST", "")
-        if not smtp_host:
-            results["email"] = "skipped — SMTP_HOST not set"
-        else:
+        sg_key = os.environ.get("SENDGRID_API_KEY", "")
+        if sg_key:
             try:
-                port = int(os.environ.get("SMTP_PORT", "587"))
-                user = os.environ.get("SMTP_USER", "")
-                pw   = os.environ.get("SMTP_PASS", "")
-                msg  = MIMEText(body)
-                msg["Subject"] = subject
-                msg["From"]    = user
-                msg["To"]      = email
-                with smtplib.SMTP(smtp_host, port, timeout=15) as s:
-                    s.ehlo(); s.starttls()
-                    if user and pw:
-                        s.login(user, pw)
-                    s.sendmail(user, [email], msg.as_string())
-                results["email"] = f"sent to {email}"
+                r = httpx.post(
+                    "https://api.sendgrid.com/v3/mail/send",
+                    headers={"Authorization": f"Bearer {sg_key}", "Content-Type": "application/json"},
+                    json={
+                        "personalizations": [{"to": [{"email": email}]}],
+                        "from": {"email": "jesussavesgolf@gmail.com"},
+                        "subject": subject,
+                        "content": [{"type": "text/plain", "value": body}],
+                    },
+                    timeout=15,
+                )
+                r.raise_for_status()
+                results["email"] = f"sent to {email} via SendGrid"
             except Exception as exc:
                 results["email"] = f"failed — {exc}"
+        else:
+            smtp_host = os.environ.get("SMTP_HOST", "")
+            if not smtp_host:
+                results["email"] = "skipped — SENDGRID_API_KEY and SMTP_HOST not set"
+            else:
+                try:
+                    port = int(os.environ.get("SMTP_PORT", "587"))
+                    user = os.environ.get("SMTP_USER", "")
+                    pw   = os.environ.get("SMTP_PASS", "")
+                    msg  = MIMEText(body)
+                    msg["Subject"] = subject
+                    msg["From"]    = user
+                    msg["To"]      = email
+                    with smtplib.SMTP(smtp_host, port, timeout=15) as s:
+                        s.ehlo(); s.starttls()
+                        if user and pw:
+                            s.login(user, pw)
+                        s.sendmail(user, [email], msg.as_string())
+                    results["email"] = f"sent to {email} via SMTP"
+                except Exception as exc:
+                    results["email"] = f"failed — {exc}"
 
     if phone:
         sid   = os.environ.get("TWILIO_SID", "")
