@@ -180,3 +180,31 @@ def export_alerts(
         })
 
     return export
+
+
+# ── Sent slots dedup (persistent across redeploys) ────────────────────────────
+
+class SentSlotBody(BaseModel):
+    alert_id: str
+    slot_key: str
+
+
+@app.post("/scraper/sent", status_code=201)
+def mark_sent_slot(body: SentSlotBody, x_api_key: Optional[str] = Header(default=None)):
+    _require_api_key(x_api_key)
+    try:
+        supabase_admin.table("sent_slots").insert({
+            "alert_id": body.alert_id,
+            "slot_key": body.slot_key,
+        }).execute()
+    except Exception:
+        # Unique constraint violation = already marked, that's fine
+        pass
+    return {"ok": True}
+
+
+@app.get("/scraper/sent/{alert_id}/{slot_key}")
+def is_sent_slot(alert_id: str, slot_key: str, x_api_key: Optional[str] = Header(default=None)):
+    _require_api_key(x_api_key)
+    result = supabase_admin.table("sent_slots").select("id").eq("alert_id", alert_id).eq("slot_key", slot_key).maybe_single().execute()
+    return {"sent": result.data is not None}
