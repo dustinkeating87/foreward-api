@@ -206,5 +206,5 @@ def mark_sent_slot(body: SentSlotBody, x_api_key: Optional[str] = Header(default
 @app.get("/scraper/sent/{alert_id}/{slot_key}")
 def is_sent_slot(alert_id: str, slot_key: str, x_api_key: Optional[str] = Header(default=None)):
     _require_api_key(x_api_key)
-    result = supabase_admin.table("sent_slots").select("id").eq("alert_id", alert_id).eq("slot_key", slot_key).maybe_single().execute()
-    return {"sent": result.data is not None}
+    result = supabase_admin.table("sent_slots").select("id").eq("alert_id", alert_id).eq("slot_key", slot_key).execute()
+    return {"sent": len(result.data) > 0 if result.data else False}
