@@ -87,7 +87,7 @@ def test_notification(
                     headers={"Authorization": f"Bearer {sg_key}", "Content-Type": "application/json"},
                     json={
                         "personalizations": [{"to": [{"email": email}]}],
-                        "from": {"email": "jesussavesgolf@gmail.com"},
+                        "from": {"email": "alerts@goodlie.golf"},
                         "subject": subject,
                         "content": [{"type": "text/plain", "value": body}],
                     },
