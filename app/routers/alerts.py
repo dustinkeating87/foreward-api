@@ -6,9 +6,17 @@ from app.dependencies import get_current_subscribed_user
 router = APIRouter(tags=["alerts"])
 
 
+ALERT_LIMIT = 10
+
 @router.post("/alerts", status_code=201)
 def create_alert(body: AlertProfileCreate, ctx=Depends(get_current_subscribed_user)):
     user_id = str(ctx["user"].id)
+
+    # Enforce per-user alert limit
+    count_result = supabase_admin.table("alert_profiles").select("id", count="exact").eq("user_id", user_id).execute()
+    if (count_result.count or 0) >= ALERT_LIMIT:
+        raise HTTPException(status_code=400, detail=f"Alert limit reached ({ALERT_LIMIT} maximum)")
+
     payload = {
         "user_id": user_id,
         "courses": body.courses,
