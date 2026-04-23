@@ -162,14 +162,26 @@ def export_alerts(
     else:
         raise HTTPException(status_code=401, detail="Authentication required")
 
-    result = supabase_admin.table("alert_profiles").select("*").eq("active", True).execute()
+    alerts_result = supabase_admin.table("alert_profiles").select("*").eq("active", True).execute()
+
+    # Build a map of user_id -> contact info from user_profiles
+    user_ids = list({row["user_id"] for row in alerts_result.data or [] if row.get("user_id")})
+    profiles_map = {}
+    if user_ids:
+        profiles_result = supabase_admin.table("user_profiles").select("id, notify_email, notify_phone").in_("id", user_ids).execute()
+        for p in profiles_result.data or []:
+            profiles_map[p["id"]] = p
 
     export = []
-    for row in result.data or []:
+    for row in alerts_result.data or []:
+        profile = profiles_map.get(row.get("user_id"), {})
+        # Use user profile contact info; fall back to alert-level fields for backwards compat
+        email = profile.get("notify_email") or row.get("notify_email") or ""
+        phone = profile.get("notify_phone") or row.get("notify_phone") or ""
         export.append({
             "id": row["id"],
-            "email": row.get("notify_email") or "",
-            "phone": row.get("notify_phone") or "",
+            "email": email,
+            "phone": phone,
             "courses": row.get("courses") or [],
             "date_from": row["date_from"],
             "date_to": row["date_to"],

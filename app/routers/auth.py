@@ -55,4 +55,16 @@ def me(current_user=Depends(get_current_user)):
         "is_active": profile.get("is_active", False),
         "is_beta": profile.get("is_beta", False),
         "stripe_customer_id": profile.get("stripe_customer_id"),
+        "notify_email": profile.get("notify_email"),
+        "notify_phone": profile.get("notify_phone"),
     }
+
+
+@router.patch("/me")
+def update_me(body: dict, current_user=Depends(get_current_user)):
+    allowed = {"notify_email", "notify_phone"}
+    updates = {k: v for k, v in body.items() if k in allowed}
+    if not updates:
+        raise HTTPException(status_code=400, detail="No valid fields to update")
+    supabase_admin.table("user_profiles").update(updates).eq("id", str(current_user.id)).execute()
+    return {"ok": True}
