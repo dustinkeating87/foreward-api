@@ -38,8 +38,11 @@ def create_alert(body: AlertProfileCreate, ctx=Depends(get_current_subscribed_us
 
 @router.get("/alerts")
 def list_alerts(ctx=Depends(get_current_subscribed_user)):
+    from datetime import date
     user_id = str(ctx["user"].id)
-    result = supabase_admin.table("alert_profiles").select("*").eq("user_id", user_id).order("created_at", desc=True).execute()
+    today = date.today().isoformat()
+    # Only return non-expired alerts (date_to >= today)
+    result = supabase_admin.table("alert_profiles").select("*").eq("user_id", user_id).gte("date_to", today).order("created_at", desc=True).execute()
     return result.data or []
 
 
