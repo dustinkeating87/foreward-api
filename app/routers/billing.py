@@ -4,6 +4,7 @@ from app.config import settings
 from app.database import supabase_admin
 from app.dependencies import get_current_user
 from app.schemas import CheckoutSessionRequest
+from datetime import datetime, timezone
 
 stripe.api_key = settings.stripe_secret_key
 
@@ -88,11 +89,24 @@ def _handle_checkout_completed(session: dict):
     subscription_id = session.get("subscription")
     customer_id = session.get("customer")
 
-    supabase_admin.table("user_profiles").update({
+    trial_end = None
+    if subscription_id:
+        try:
+            sub = stripe.Subscription.retrieve(subscription_id)
+            if sub.get("trial_end"):
+                trial_end = datetime.fromtimestamp(sub["trial_end"], tz=timezone.utc).isoformat()
+        except Exception:
+            pass
+
+    updates = {
         "is_active": True,
         "stripe_customer_id": customer_id,
         "stripe_subscription_id": subscription_id,
-    }).eq("id", user_id).execute()
+    }
+    if trial_end:
+        updates["trial_end"] = trial_end
+
+    supabase_admin.table("user_profiles").update(updates).eq("id", user_id).execute()
 
 
 def _handle_subscription_deleted(subscription: dict):
@@ -109,6 +123,7 @@ def _handle_subscription_deleted(subscription: dict):
     supabase_admin.table("user_profiles").update({
         "is_active": False,
         "stripe_subscription_id": None,
+        "trial_end": None,
     }).eq("id", user_id).execute()
 
     supabase_admin.table("alert_profiles").update({"active": False}).eq("user_id", user_id).execute()
