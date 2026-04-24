@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from app.schemas import SignupRequest, LoginRequest
 from app.database import supabase, supabase_admin
 from app.dependencies import get_current_user
+from datetime import datetime, timezone, timedelta
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -72,6 +73,8 @@ def me(current_user=Depends(get_current_user)):
         "stripe_customer_id": profile.get("stripe_customer_id"),
         "notify_email": profile.get("notify_email"),
         "notify_phone": profile.get("notify_phone"),
+        "trial_end": profile.get("trial_end"),
+        "notify_updated_at": profile.get("notify_updated_at"),
     }
 
 
@@ -81,5 +84,16 @@ def update_me(body: dict, current_user=Depends(get_current_user)):
     updates = {k: v for k, v in body.items() if k in allowed}
     if not updates:
         raise HTTPException(status_code=400, detail="No valid fields to update")
+
+    # Check 24-hour rate limit
+    result = supabase_admin.table("user_profiles").select("notify_updated_at").eq("id", str(current_user.id)).maybe_single().execute()
+    profile = result.data or {}
+    last_updated = profile.get("notify_updated_at")
+    if last_updated:
+        last_updated_dt = datetime.fromisoformat(last_updated.replace("Z", "+00:00"))
+        if datetime.now(timezone.utc) - last_updated_dt < timedelta(hours=24):
+            raise HTTPException(status_code=429, detail="Notification preferences can only be updated once every 24 hours")
+
+    updates["notify_updated_at"] = datetime.now(timezone.utc).isoformat()
     supabase_admin.table("user_profiles").update(updates).eq("id", str(current_user.id)).execute()
     return {"ok": True}
