@@ -97,3 +97,27 @@ def update_me(body: dict, current_user=Depends(get_current_user)):
     updates["notify_updated_at"] = datetime.now(timezone.utc).isoformat()
     supabase_admin.table("user_profiles").update(updates).eq("id", str(current_user.id)).execute()
     return {"ok": True}
+
+
+@router.post("/reset-password")
+def reset_password(body: dict):
+    email = body.get("email")
+    if not email:
+        raise HTTPException(status_code=400, detail="Email is required")
+    try:
+        supabase.auth.reset_password_for_email(email, {"redirect_to": "https://goodlie.golf/auth/reset"})
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"ok": True}
+
+
+@router.post("/update-password")
+def update_password(body: dict, current_user=Depends(get_current_user)):
+    password = body.get("password")
+    if not password or len(password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+    try:
+        supabase_admin.auth.admin.update_user_by_id(str(current_user.id), {"password": password})
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"ok": True}
