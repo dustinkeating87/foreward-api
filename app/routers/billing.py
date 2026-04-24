@@ -18,7 +18,6 @@ def create_checkout_session(body: CheckoutSessionRequest, current_user=Depends(g
     customer_id = profile.get("stripe_customer_id")
     email = body.email or current_user.email
 
-    # Reuse existing Stripe customer or create a new one
     if not customer_id:
         customer = stripe.Customer.create(
             email=email,
@@ -42,6 +41,23 @@ def create_checkout_session(body: CheckoutSessionRequest, current_user=Depends(g
         raise HTTPException(status_code=400, detail=str(e))
 
     return {"checkout_url": session.url, "session_id": session.id}
+
+
+@router.post("/subscription/cancel")
+def cancel_subscription(current_user=Depends(get_current_user)):
+    result = supabase_admin.table("user_profiles").select("stripe_subscription_id").eq("id", str(current_user.id)).maybe_single().execute()
+    profile = result.data or {}
+    subscription_id = profile.get("stripe_subscription_id")
+
+    if not subscription_id:
+        raise HTTPException(status_code=404, detail="No active subscription found")
+
+    try:
+        stripe.Subscription.modify(subscription_id, cancel_at_period_end=True)
+    except stripe.StripeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return {"ok": True, "message": "Subscription will cancel at end of billing period"}
 
 
 @router.post("/webhooks/stripe", status_code=200)
@@ -84,7 +100,6 @@ def _handle_subscription_deleted(subscription: dict):
     if not subscription_id:
         return
 
-    # Find affected user before clearing the subscription ID
     result = supabase_admin.table("user_profiles").select("id").eq("stripe_subscription_id", subscription_id).maybe_single().execute()
     if not result.data:
         return
@@ -97,20 +112,3 @@ def _handle_subscription_deleted(subscription: dict):
     }).eq("id", user_id).execute()
 
     supabase_admin.table("alert_profiles").update({"active": False}).eq("user_id", user_id).execute()
-
-
-@router.post("/subscription/cancel")
-def cancel_subscription(current_user=Depends(get_current_user)):
-    result = supabase_admin.table("user_profiles").select("stripe_subscription_id").eq("id", str(current_user.id)).maybe_single().execute()
-    profile = result.data or {}
-    subscription_id = profile.get("stripe_subscription_id")
-
-    if not subscription_id:
-        raise HTTPException(status_code=404, detail="No active subscription found")
-
-    try:
-        stripe.Subscription.modify(subscription_id, cancel_at_period_end=True)
-    except stripe.StripeError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-    return {"ok": True, "message": "Subscription will cancel at end of billing period"}
