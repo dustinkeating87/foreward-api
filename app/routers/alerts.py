@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends
 from app.schemas import AlertProfileCreate, AlertProfileUpdate
 from app.database import supabase_admin
-from app.dependencies import get_current_subscribed_user
+from app.dependencies import get_current_subscribed_user, get_current_user
 
 router = APIRouter(tags=["alerts"])
 
