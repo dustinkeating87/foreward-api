@@ -97,3 +97,20 @@ def _handle_subscription_deleted(subscription: dict):
     }).eq("id", user_id).execute()
 
     supabase_admin.table("alert_profiles").update({"active": False}).eq("user_id", user_id).execute()
+
+
+@router.post("/subscription/cancel")
+def cancel_subscription(current_user=Depends(get_current_user)):
+    result = supabase_admin.table("user_profiles").select("stripe_subscription_id").eq("id", str(current_user.id)).maybe_single().execute()
+    profile = result.data or {}
+    subscription_id = profile.get("stripe_subscription_id")
+
+    if not subscription_id:
+        raise HTTPException(status_code=404, detail="No active subscription found")
+
+    try:
+        stripe.Subscription.modify(subscription_id, cancel_at_period_end=True)
+    except stripe.StripeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return {"ok": True, "message": "Subscription will cancel at end of billing period"}
