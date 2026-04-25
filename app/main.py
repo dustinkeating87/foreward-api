@@ -6,7 +6,7 @@ from typing import Optional
 from fastapi import FastAPI, HTTPException, Header, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from app.routers import auth, alerts, billing, invites, admin
+from app.routers import auth, alerts, billing, invites, admin, course_requests
 from app.database import supabase, supabase_admin
 from app.config import settings
 import httpx
@@ -26,6 +26,7 @@ app.include_router(alerts.router)
 app.include_router(billing.router)
 app.include_router(invites.router)
 app.include_router(admin.router)
+app.include_router(course_requests.router)
 
 # ── In-memory heartbeat store ──────────────────────────────────────────────────
 _heartbeat: dict = {"timestamp": None, "poll_count": None}
