@@ -81,5 +81,5 @@ def delete_alert(alert_id: str, ctx=Depends(get_current_subscribed_user)):
 
 @router.get("/alerts/history")
 def get_alert_history(current_user=Depends(get_current_user)):
-    result = supabase_admin.table("sent_slots").select("*").eq("user_id", str(current_user.id)).order("notified_at", desc=True).limit(100).execute()
+    result = supabase_admin.table("sent_slots").select("*").eq("user_id", str(current_user.id)).order("created_at", desc=True).limit(100).execute()
     return result.data or []

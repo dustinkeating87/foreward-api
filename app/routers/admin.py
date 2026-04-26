@@ -107,8 +107,8 @@ def admin_dashboard(current_user=Depends(require_admin)):
     cutoff_24h = (now - timedelta(hours=24)).isoformat()
     cutoff_7d = (now - timedelta(days=7)).isoformat()
 
-    sent_24h = supabase_admin.table("sent_slots").select("id").gte("notified_at", cutoff_24h).execute()
-    sent_7d = supabase_admin.table("sent_slots").select("id").gte("notified_at", cutoff_7d).execute()
+    sent_24h = supabase_admin.table("sent_slots").select("id").gte("created_at", cutoff_24h).execute()
+    sent_7d = supabase_admin.table("sent_slots").select("id").gte("created_at", cutoff_7d).execute()
 
     users = supabase_admin.table("user_profiles").select("id, is_active, is_beta").execute()
     alerts = supabase_admin.table("alert_profiles").select("id, active").execute()
