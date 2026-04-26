@@ -2,10 +2,13 @@ from fastapi import APIRouter, HTTPException, Request, Depends
 from app.database import supabase_admin
 from app.dependencies import get_current_user
 from app.config import settings
+from collections import Counter
 from datetime import datetime, timezone, timedelta
 import httpx
+import logging
 
 router = APIRouter(tags=["admin"])
+log = logging.getLogger(__name__)
 
 ADMIN_EMAILS = ["dustinkeating87@gmail.com"]
 ALERTING_PLATFORMS = ["gtg", "golfnow", "ezlinks"]
@@ -106,12 +109,73 @@ def admin_dashboard(current_user=Depends(require_admin)):
     now = datetime.now(timezone.utc)
     cutoff_24h = (now - timedelta(hours=24)).isoformat()
     cutoff_7d = (now - timedelta(days=7)).isoformat()
+    cutoff_30d = (now - timedelta(days=30)).isoformat()
 
     sent_24h = supabase_admin.table("sent_slots").select("id").gte("created_at", cutoff_24h).execute()
     sent_7d = supabase_admin.table("sent_slots").select("id").gte("created_at", cutoff_7d).execute()
 
     users = supabase_admin.table("user_profiles").select("id, is_active, is_beta").execute()
     alerts = supabase_admin.table("alert_profiles").select("id, active").execute()
+
+    try:
+        slots_raw = supabase_admin.table("sent_slots").select("created_at").gte("created_at", cutoff_30d).limit(5000).execute()
+        day_counts = Counter(row["created_at"][:10] for row in (slots_raw.data or []))
+        alert_volume_30d = [
+            {"date": (now - timedelta(days=i)).strftime("%Y-%m-%d"),
+             "count": day_counts.get((now - timedelta(days=i)).strftime("%Y-%m-%d"), 0)}
+            for i in range(29, -1, -1)
+        ]
+    except Exception as exc:
+        log.error("alert_volume_30d query failed: %s", exc)
+        alert_volume_30d = []
+
+    try:
+        active_alerts_raw = supabase_admin.table("alert_profiles").select("courses").eq("active", True).execute()
+        course_counts = Counter()
+        for row in (active_alerts_raw.data or []):
+            for course in (row.get("courses") or []):
+                course_counts[course] += 1
+        course_coverage = [
+            {"course_name": name, "alert_count": count, "platform": "unknown"}
+            for name, count in course_counts.most_common(25)
+        ]
+    except Exception as exc:
+        log.error("course_coverage query failed: %s", exc)
+        course_coverage = []
+
+    # TODO: add stripe_subscription_status to user_profiles (synced via Stripe webhook) for
+    # precise paying/trial/churned counts. Currently inferring from trial_end and stripe_subscription_id.
+    try:
+        users_full = supabase_admin.table("user_profiles").select(
+            "id, is_active, is_beta, stripe_subscription_id, trial_end"
+        ).execute()
+        users_data = users_full.data or []
+        now_str = now.strftime("%Y-%m-%dT%H:%M:%S+00:00")
+        trial_users = sum(
+            1 for u in users_data
+            if u.get("is_active") and (u.get("trial_end") or "") > now_str
+        )
+        paying_users = sum(
+            1 for u in users_data
+            if u.get("is_active")
+            and u.get("stripe_subscription_id")
+            and (not u.get("trial_end") or u["trial_end"] <= now_str)
+        )
+        churned_users = sum(
+            1 for u in users_data
+            if not u.get("is_active") and u.get("stripe_subscription_id")
+        )
+        user_funnel = {
+            "total_users": len(users_data),
+            "active_users": sum(1 for u in users_data if u.get("is_active")),
+            "beta_users": sum(1 for u in users_data if u.get("is_beta")),
+            "paying_users": paying_users,
+            "trial_users": trial_users,
+            "churned_users": churned_users,
+        }
+    except Exception as exc:
+        log.error("user_funnel query failed: %s", exc)
+        user_funnel = None
 
     return {
         "health": health,
@@ -126,4 +190,7 @@ def admin_dashboard(current_user=Depends(require_admin)):
             "total_alerts": len(alerts.data or []),
             "active_alerts": len([a for a in (alerts.data or []) if a.get("active")]),
         },
+        "alert_volume_30d": alert_volume_30d,
+        "course_coverage": course_coverage,
+        "user_funnel": user_funnel,
     }
