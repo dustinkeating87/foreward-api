@@ -11,7 +11,7 @@ router = APIRouter(tags=["admin"])
 log = logging.getLogger(__name__)
 
 ADMIN_EMAILS = ["dustinkeating87@gmail.com"]
-ALERTING_PLATFORMS = ["gtg", "golfnow", "ezlinks"]
+ALERTING_PLATFORMS = ["gtg", "golfnow", "chronogolf"]
 ZERO_STREAK_THRESHOLD = 10
 
 
