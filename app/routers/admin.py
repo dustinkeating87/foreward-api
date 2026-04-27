@@ -25,7 +25,7 @@ def require_admin(current_user=Depends(get_current_user)):
 def admin_stats(current_user=Depends(require_admin)):
     users = supabase_admin.table("user_profiles").select("id, email, is_active, is_beta, created_at, stripe_subscription_id").execute()
     alerts = supabase_admin.table("alert_profiles").select("id, user_id, active, courses").execute()
-    sent = supabase_admin.table("sent_slots").select("id, notified_at").execute()
+    sent = supabase_admin.table("sent_slots").select("id, created_at").execute()
 
     total_users = len(users.data or [])
     active_subscribers = len([u for u in (users.data or []) if u.get("is_active") and not u.get("is_beta")])
