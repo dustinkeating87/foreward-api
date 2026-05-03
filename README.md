@@ -1,6 +1,6 @@
-# Tee Sniper API
+# Good Lie API
 
-FastAPI backend for the Tee Sniper tee time alert system.
+FastAPI backend for the Good Lie tee time alert system.
 
 ## Stack
 
@@ -108,7 +108,7 @@ stripe prices create \
   --unit-amount 1000 \
   --currency usd \
   --recurring[interval]=month \
-  --product-data[name]="Tee Sniper"
+  --product-data[name]="Good Lie"
 ```
 
 Copy the resulting `price_...` ID into `STRIPE_PRICE_ID`.
