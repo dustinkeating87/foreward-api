@@ -1,4 +1,5 @@
-from fastapi import APIRouter, HTTPException, Depends
+from typing import Optional
+from fastapi import APIRouter, HTTPException, Depends, Query
 from app.schemas import AlertProfileCreate, AlertProfileUpdate
 from app.database import supabase_admin
 from app.dependencies import get_current_subscribed_user, get_current_user
@@ -37,12 +38,20 @@ def create_alert(body: AlertProfileCreate, ctx=Depends(get_current_subscribed_us
 
 
 @router.get("/alerts")
-def list_alerts(ctx=Depends(get_current_subscribed_user)):
-    from datetime import date
+def list_alerts(
+    status: Optional[str] = Query(default=None),
+    ctx=Depends(get_current_subscribed_user),
+):
     user_id = str(ctx["user"].id)
-    today = date.today().isoformat()
-    # Only return non-expired alerts (date_to >= today)
-    result = supabase_admin.table("alert_profiles").select("*").eq("user_id", user_id).gte("date_to", today).order("created_at", desc=True).execute()
+    statuses = [s.strip() for s in status.split(",") if s.strip()] if status else ["active"]
+
+    query = supabase_admin.table("alert_profiles").select("*").eq("user_id", user_id)
+    if len(statuses) == 1:
+        query = query.eq("status", statuses[0])
+    else:
+        query = query.in_("status", statuses)
+
+    result = query.order("created_at", desc=True).execute()
     return result.data or []
 
 
@@ -81,5 +90,26 @@ def delete_alert(alert_id: str, ctx=Depends(get_current_subscribed_user)):
 
 @router.get("/alerts/history")
 def get_alert_history(current_user=Depends(get_current_user)):
-    result = supabase_admin.table("sent_slots").select("*").eq("user_id", str(current_user.id)).order("created_at", desc=True).limit(100).execute()
-    return result.data or []
+    result = supabase_admin.table("sent_slots").select("*, alert_profiles(status)").eq("user_id", str(current_user.id)).order("created_at", desc=True).limit(100).execute()
+    rows = []
+    for row in result.data or []:
+        alert_data = row.pop("alert_profiles", None) or {}
+        row["status"] = alert_data.get("status")
+        rows.append(row)
+    return rows
+
+
+@router.post("/alerts/{alert_id}/retry")
+def retry_alert(alert_id: str, ctx=Depends(get_current_subscribed_user)):
+    from datetime import date
+    user_id = str(ctx["user"].id)
+
+    existing = supabase_admin.table("alert_profiles").select("id, date_to").eq("id", alert_id).eq("user_id", user_id).maybe_single().execute()
+    if not existing.data:
+        raise HTTPException(status_code=404, detail="Alert not found")
+
+    if existing.data["date_to"] < date.today().isoformat():
+        raise HTTPException(status_code=400, detail="Alert end date has passed — edit dates before retrying")
+
+    supabase_admin.table("alert_profiles").update({"status": "active"}).eq("id", alert_id).eq("user_id", user_id).execute()
+    return {"id": alert_id, "status": "active"}
