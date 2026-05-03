@@ -2,10 +2,12 @@ from fastapi import APIRouter, HTTPException, Request, Depends
 from app.database import supabase_admin
 from app.dependencies import get_current_user
 from app.config import settings
+from app.email import send_email
 from collections import Counter
 from datetime import datetime, timezone, timedelta
 import httpx
 import logging
+import os
 
 router = APIRouter(tags=["admin"])
 log = logging.getLogger(__name__)
@@ -13,6 +15,13 @@ log = logging.getLogger(__name__)
 ADMIN_EMAILS = ["dustinkeating87@gmail.com"]
 ALERTING_PLATFORMS = ["gtg", "golfnow", "chronogolf"]
 ZERO_STREAK_THRESHOLD = 10
+
+PLATFORM_GUIDANCE = {
+    "lakeview": "The Lakeview cookie has likely expired. Log in to the scraper dashboard and refresh the session cookie.",
+    "gtg": "Check 2captcha balance and account health. Low credits or a banned account will cause silent failures.",
+    "golfnow": "Check worker logs and proxy health. GolfNow scraper may be blocked or the proxy pool exhausted.",
+}
+DEFAULT_GUIDANCE = "Check Railway worker logs for errors or restart the worker."
 
 
 def require_admin(current_user=Depends(get_current_user)):
@@ -50,6 +59,14 @@ async def scraper_heartbeat(request: Request):
     body = await request.json()
     poll_number = body.get("poll_count") or body.get("poll", 0)
 
+    threshold = int(os.environ.get("ALARM_THRESHOLD_POLLS", "10"))
+    alarm_to = os.environ.get("ALARM_EMAIL_TO", "hello@goodlie.golf")
+    alarm_from = os.environ.get("ALARM_EMAIL_FROM", "hello@goodlie.golf")
+
+    prev_result = supabase_admin.table("scraper_health").select("*").eq("id", 1).maybe_single().execute()
+    prev_data = prev_result.data or {}
+    prev_streaks: dict = prev_data.get("consecutive_zero_polls") or {}
+
     upsert_data = {
         "id": 1,
         "last_heartbeat": datetime.now(timezone.utc).isoformat(),
@@ -64,6 +81,41 @@ async def scraper_heartbeat(request: Request):
         upsert_data["last_productive_poll"] = datetime.now(timezone.utc).isoformat()
 
     supabase_admin.table("scraper_health").upsert(upsert_data).execute()
+
+    new_streaks: dict = body.get("consecutive_zero_polls") or {}
+    last_productive = prev_data.get("last_productive_poll")
+    admin_url = "https://goodlie.golf/admin"
+
+    all_platforms = set(prev_streaks.keys()) | set(new_streaks.keys())
+    for platform in all_platforms:
+        prev_count = int(prev_streaks.get(platform) or 0)
+        new_count = int(new_streaks.get(platform) or 0)
+        try:
+            if prev_count < threshold and new_count >= threshold:
+                guidance = PLATFORM_GUIDANCE.get(platform, DEFAULT_GUIDANCE)
+                subject = f"[Good Lie] {platform.upper()} silent for {new_count} polls (about {new_count} min)"
+                lines = [
+                    f"Platform: {platform}",
+                    f"Consecutive zero-slot polls: {new_count}",
+                ]
+                if last_productive:
+                    lines.append(f"Last productive poll: {last_productive}")
+                lines += [
+                    "",
+                    guidance,
+                    "",
+                    f"Admin dashboard: {admin_url}",
+                ]
+                send_email(alarm_to, subject, "\n".join(lines), from_addr=alarm_from)
+                log.info("alarm email sent for platform=%s streak=%d", platform, new_count)
+            elif prev_count >= threshold and new_count == 0:
+                subject = f"[Good Lie] {platform.upper()} recovered"
+                body_text = f"{platform} is producing slots again."
+                send_email(alarm_to, subject, body_text, from_addr=alarm_from)
+                log.info("recovery email sent for platform=%s", platform)
+        except Exception as exc:
+            log.error("heartbeat email failed for platform=%s: %s", platform, exc)
+
     return {"ok": True}
 
 
