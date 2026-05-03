@@ -166,7 +166,7 @@ def export_alerts(
     else:
         raise HTTPException(status_code=401, detail="Authentication required")
 
-    alerts_result = supabase_admin.table("alert_profiles").select("*").eq("active", True).execute()
+    alerts_result = supabase_admin.table("alert_profiles").select("*").eq("status", "active").execute()
 
     # Build a map of user_id -> contact info from user_profiles
     user_ids = list({row["user_id"] for row in alerts_result.data or [] if row.get("user_id")})
@@ -184,6 +184,8 @@ def export_alerts(
         phone = profile.get("notify_phone") or row.get("notify_phone") or ""
         export.append({
             "id": row["id"],
+            "user_id": row.get("user_id"),
+            "status": row.get("status", "active"),
             "email": email,
             "phone": phone,
             "courses": row.get("courses") or [],
@@ -224,3 +226,98 @@ def is_sent_slot(alert_id: str, slot_key: str, x_api_key: Optional[str] = Header
     _require_api_key(x_api_key)
     result = supabase_admin.table("sent_slots").select("id").eq("alert_id", alert_id).eq("slot_key", slot_key).execute()
     return {"sent": len(result.data) > 0 if result.data else False}
+
+
+# ── Alert lifecycle ────────────────────────────────────────────────────────────
+
+@app.post("/scraper/expire-alerts", status_code=200)
+def expire_stale_alerts(x_api_key: Optional[str] = Header(default=None)):
+    """Expire alert_profiles where date_to < today and status='active'."""
+    _require_api_key(x_api_key)
+    from datetime import date
+    today = date.today().isoformat()
+    result = supabase_admin.table("alert_profiles").update({"status": "expired"}) \
+        .lt("date_to", today).eq("status", "active").execute()
+    expired = len(result.data) if result.data else 0
+    return {"ok": True, "expired": expired}
+
+
+class FireAlertSlot(BaseModel):
+    slot_key: str
+    course_name: Optional[str] = None
+    tee_time: Optional[str] = None
+    players: Optional[int] = None
+
+
+class FireAlertBody(BaseModel):
+    alert_id: str
+    user_id: Optional[str] = None
+    scanned_at: Optional[str] = None
+    slots: list[FireAlertSlot] = []
+
+
+@app.post("/scraper/fire-alert", status_code=200)
+def fire_alert(body: FireAlertBody, x_api_key: Optional[str] = Header(default=None)):
+    """Bulk-insert sent_slots for all matched slots and mark the alert as fired."""
+    _require_api_key(x_api_key)
+
+    if body.slots:
+        rows = []
+        for slot in body.slots:
+            row: dict = {"alert_id": body.alert_id, "slot_key": slot.slot_key}
+            if body.user_id:
+                row["user_id"] = body.user_id
+            if slot.course_name:
+                row["course_name"] = slot.course_name
+            if slot.tee_time:
+                row["tee_time"] = slot.tee_time
+            if slot.players is not None:
+                row["players"] = slot.players
+            if body.scanned_at:
+                row["scanned_at"] = body.scanned_at
+            rows.append(row)
+
+        try:
+            supabase_admin.table("sent_slots").insert(rows).execute()
+        except Exception:
+            for row in rows:
+                try:
+                    supabase_admin.table("sent_slots").insert(row).execute()
+                except Exception:
+                    pass
+
+    supabase_admin.table("alert_profiles").update({"status": "fired"}) \
+        .eq("id", body.alert_id).execute()
+    return {"ok": True}
+
+
+class MarkTakenBody(BaseModel):
+    current_slot_keys: list[str]
+    scanned_course_names: list[str]
+
+
+@app.post("/scraper/mark-taken", status_code=200)
+def mark_taken_slots(body: MarkTakenBody, x_api_key: Optional[str] = Header(default=None)):
+    """Mark sent_slots as taken when they vanish from a productive platform poll."""
+    _require_api_key(x_api_key)
+
+    # Safety: empty lists would match all or nothing incorrectly
+    if not body.scanned_course_names or not body.current_slot_keys:
+        return {"ok": True, "updated": 0}
+
+    from datetime import datetime, timedelta, timezone as tz
+    cutoff = (datetime.now(tz.utc) - timedelta(minutes=30)).isoformat()
+    now_str = datetime.now(tz.utc).isoformat()
+
+    try:
+        result = supabase_admin.table("sent_slots") \
+            .update({"taken_at": now_str}) \
+            .is_("taken_at", "null") \
+            .in_("course_name", body.scanned_course_names) \
+            .not_.in_("slot_key", body.current_slot_keys) \
+            .gt("created_at", cutoff) \
+            .execute()
+        updated = len(result.data) if result.data else 0
+        return {"ok": True, "updated": updated}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"mark-taken failed: {exc}")
