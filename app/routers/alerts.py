@@ -14,7 +14,7 @@ def create_alert(body: AlertProfileCreate, ctx=Depends(get_current_subscribed_us
     user_id = str(ctx["user"].id)
 
     # Enforce per-user alert limit
-    count_result = supabase_admin.table("alert_profiles").select("id", count="exact").eq("user_id", user_id).execute()
+    count_result = supabase_admin.table("alert_profiles").select("id", count="exact").eq("user_id", user_id).eq("status", "active").execute()
     if (count_result.count or 0) >= ALERT_LIMIT:
         raise HTTPException(status_code=400, detail=f"Alert limit reached ({ALERT_LIMIT} maximum)")
 
