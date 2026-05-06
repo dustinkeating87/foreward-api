@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     base_url: str = "http://localhost:8000"
     success_url: str = "http://localhost:3000/success"
     cancel_url: str = "http://localhost:3000/cancel"
+    free_tier_enabled: bool = False
 
     model_config = {"env_file": ".env"}
 
