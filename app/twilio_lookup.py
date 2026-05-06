@@ -5,7 +5,7 @@ from app.util.phone import hash_phone
 
 log = logging.getLogger(__name__)
 
-BLOCKED_TYPES = {"nonFixedVoip", "personal"}
+BLOCKED_TYPES = {"nonFixedVoip"}
 BLOCKED_CARRIERS = {"google voice", "textnow", "hushed", "sideline", "pinger"}
 
 # In-memory cache: phone_hash -> True (blocked) | False (allowed)

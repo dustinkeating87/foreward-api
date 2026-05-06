@@ -1,7 +1,9 @@
 import logging
+import os
 import secrets
 from datetime import datetime, timedelta, timezone
 
+import httpx
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
@@ -10,8 +12,6 @@ from app.database import supabase_admin
 from app.ip_rate_limit import check_ip_rate_limit
 from app.twilio_lookup import LookupBlocked, check_phone
 from app.util.phone import hash_phone, is_valid_e164
-import httpx
-import os
 
 log = logging.getLogger(__name__)
 
@@ -148,7 +148,7 @@ def verify_phone(body: VerifyPhoneRequest, request: Request):
     if now > expires_at:
         raise HTTPException(status_code=400, detail="Invalid or expired code.")
 
-    if row["code"] != body.code:
+    if not secrets.compare_digest(row["code"], body.code):
         raise HTTPException(status_code=400, detail="Invalid or expired code.")
 
     verification_token = secrets.token_urlsafe(32)
