@@ -178,6 +178,25 @@ Beta gating.
 
 **RLS:** enabled, no policies captured (effectively service-role-only via PostgreSQL default).
 
+### `phone_verification_codes`
+Short-lived OTP rows for free-tier phone verification (Block 2).
+
+| Column | Type | Nullable | Default | Notes |
+|---|---|---|---|---|
+| id | uuid | NO | gen_random_uuid() | PK |
+| phone_hash | text | NO | — | SHA-256 of E.164 phone |
+| code | text | NO | — | 6-digit OTP (plaintext, short-lived) |
+| verification_token | text | YES | — | Set on successful verify; consumed by Block 5 signup |
+| created_at | timestamptz | NO | now() | |
+| expires_at | timestamptz | NO | — | Code TTL: created_at + 10 min |
+| token_expires_at | timestamptz | YES | — | Token TTL: verified_at + 30 min |
+| resend_count | int | NO | 0 | Total resends since last send-verification-code |
+| last_resend_at | timestamptz | YES | — | Enforces 60s cooldown between resends |
+| used | boolean | NO | false | True after successful verify |
+
+**Index:** `ix_pvc_phone_hash` on `(phone_hash)`.
+**RLS:** enabled, service-role only (API uses `supabase_admin` for all reads/writes).
+
 ### `scraper_health`
 Single-row health table for the worker.
 
@@ -222,6 +241,7 @@ Committed migrations:
 - `20260506_add_captcha_balance_to_scraper_health.sql`
 - `20260506_add_heartbeat_alarm_state.sql`
 - `20260506_add_free_tier_columns.sql` — commit TBD (this session)
+- `20260506_add_phone_verification_codes.sql` — Block 2; committed, not yet applied to prod (Dustin applies via SQL Editor)
 
 `supabase_migrations.schema_migrations` table still does not exist; using the directory as the registry rather than the Supabase CLI's tracking system. Acceptable for this scale.
 
@@ -614,6 +634,9 @@ Auth
   POST   /auth/signup
   POST   /auth/login
   GET    /auth/me
+  POST   /auth/send-verification-code   ← FREE_TIER_ENABLED gate; Twilio Lookup + IP rate limit + phone dedupe + SMS send
+  POST   /auth/verify-phone             ← FREE_TIER_ENABLED gate; validates OTP, returns verification_token (consumed by Block 5)
+  POST   /auth/resend-verification-code ← FREE_TIER_ENABLED gate; 60s cooldown, max 3 resends per code
 
 Alerts (user-facing)
   POST   /alerts
@@ -790,6 +813,23 @@ ClickUp is the live source of truth — this list is point-in-time.
 ---
 
 ## Decision log
+
+### 2026-05-06 (Block 2 — phone verification endpoints)
+
+Three new endpoints added to `foreward-api` under `/auth/`: `send-verification-code`, `verify-phone`, `resend-verification-code`. All gated by `FREE_TIER_ENABLED=false` — return 503 in production until Block 9 flips the flag.
+
+New files: `app/util/phone.py` (SHA-256 hashing, E.164 validation), `app/twilio_lookup.py` (Twilio Lookup v2 wrapper with in-memory cache), `app/ip_rate_limit.py` (midnight-UTC IP counter on `app.state`), `app/routers/phone_verification.py` (3 endpoints). New unit tests in `tests/test_phone_util.py` (8 tests, all passing).
+
+New DB table: `phone_verification_codes` — migration file committed but Dustin must apply via Supabase SQL Editor before Block 2 endpoints are fully functional.
+
+Verification token design: on successful `verify-phone`, a URL-safe UUID token is stored on the `phone_verification_codes` row and returned to the client. Block 5 (Lovable signup flow) will submit this token to prove phone was verified before account creation.
+
+**Dustin action still required before Block 2 is fully live locally:**
+1. Apply `20260506_add_phone_verification_codes.sql` via Supabase SQL Editor
+2. Add `TWILIO_SID`, `TWILIO_TOKEN`, `TWILIO_FROM` to Railway `web` service env vars
+3. Run local acceptance tests (AC2–7) with `FREE_TIER_ENABLED=true`
+
+ClickUp `86ahaza0k` closed.
 
 ### 2026-05-06 (Block 1 — free-tier schema foundation)
 
