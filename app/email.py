@@ -22,3 +22,28 @@ def send_email(to: str, subject: str, body: str, from_addr: str = "hello@goodlie
         timeout=15,
     )
     r.raise_for_status()
+
+
+def send_balance_alarm_email(balance: float, threshold: float) -> None:
+    send_email(
+        os.environ.get("ALARM_EMAIL_TO", "hello@goodlie.golf"),
+        "[Good Lie] 2Captcha balance low",
+        (
+            f"2Captcha balance has dropped below ${threshold:.2f}.\n\n"
+            f"Current balance: ${balance:.2f}\n\n"
+            "Top up at https://2captcha.com/pay to avoid GTG scraper failures."
+        ),
+        from_addr=os.environ.get("ALARM_EMAIL_FROM", "hello@goodlie.golf"),
+    )
+
+
+def send_balance_recovery_email(balance: float, threshold: float) -> None:
+    send_email(
+        os.environ.get("ALARM_EMAIL_TO", "hello@goodlie.golf"),
+        "[Good Lie] 2Captcha balance recovered",
+        (
+            f"2Captcha balance is back above ${threshold:.2f}.\n\n"
+            f"Current balance: ${balance:.2f}"
+        ),
+        from_addr=os.environ.get("ALARM_EMAIL_FROM", "hello@goodlie.golf"),
+    )
