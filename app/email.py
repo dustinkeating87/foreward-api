@@ -47,3 +47,25 @@ def send_balance_recovery_email(balance: float, threshold: float) -> None:
         ),
         from_addr=os.environ.get("ALARM_EMAIL_FROM", "hello@goodlie.golf"),
     )
+
+
+def send_heartbeat_alarm_email(seconds_stale: int, threshold_seconds: int) -> None:
+    send_email(
+        os.environ.get("ALARM_EMAIL_TO", "hello@goodlie.golf"),
+        "[Good Lie] Worker heartbeat stale",
+        (
+            f"No heartbeat from the scraper worker for {seconds_stale}s "
+            f"(threshold: {threshold_seconds}s).\n\n"
+            "Check Railway worker logs. The worker may be crashed or hung."
+        ),
+        from_addr=os.environ.get("ALARM_EMAIL_FROM", "hello@goodlie.golf"),
+    )
+
+
+def send_heartbeat_recovery_email(was_stale_seconds: int, threshold_seconds: int) -> None:
+    send_email(
+        os.environ.get("ALARM_EMAIL_TO", "hello@goodlie.golf"),
+        "[Good Lie] Worker heartbeat recovered",
+        f"Scraper worker heartbeat has recovered.\n\nThreshold: {threshold_seconds}s.",
+        from_addr=os.environ.get("ALARM_EMAIL_FROM", "hello@goodlie.golf"),
+    )

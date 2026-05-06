@@ -1,6 +1,8 @@
+import asyncio
 import os
 import time
 import smtplib
+from contextlib import asynccontextmanager
 from email.mime.text import MIMEText
 from typing import Optional
 from fastapi import FastAPI, HTTPException, Header, Query
@@ -9,9 +11,23 @@ from pydantic import BaseModel
 from app.routers import auth, alerts, billing, invites, admin, course_requests, activity
 from app.database import supabase, supabase_admin
 from app.config import settings
+from app.heartbeat_monitor import heartbeat_monitor_loop
 import httpx
 
-app = FastAPI(title="Tee Sniper API", version="1.0.0")
+
+@asynccontextmanager
+async def lifespan(app):
+    task = asyncio.create_task(heartbeat_monitor_loop())
+    try:
+        yield
+    finally:
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+app = FastAPI(title="Tee Sniper API", version="1.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
