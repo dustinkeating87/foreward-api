@@ -8,7 +8,7 @@ from typing import Optional
 from fastapi import FastAPI, HTTPException, Header, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from app.routers import auth, alerts, billing, invites, admin, course_requests, activity
+from app.routers import auth, alerts, billing, invites, admin, course_requests, activity, phone_verification
 from app.database import supabase, supabase_admin
 from app.config import settings
 from app.heartbeat_monitor import heartbeat_monitor_loop
@@ -17,6 +17,7 @@ import httpx
 
 @asynccontextmanager
 async def lifespan(app):
+    app.state.ip_rate_limit = {}
     task = asyncio.create_task(heartbeat_monitor_loop())
     try:
         yield
@@ -44,6 +45,7 @@ app.include_router(invites.router)
 app.include_router(admin.router)
 app.include_router(course_requests.router)
 app.include_router(activity.router)
+app.include_router(phone_verification.router)
 
 # ── In-memory heartbeat store ──────────────────────────────────────────────────
 _heartbeat: dict = {"timestamp": None, "poll_count": None}
