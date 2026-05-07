@@ -835,6 +835,7 @@ Key architectural decisions:
 - New endpoint GET /courses/available-for-free-tier returns {courses, count, available} (NOT bare []) gated behind FREE_TIER_ENABLED env var. Returns 503 when off, 200 with available=false when on but no qualifying paid alerts. Output format is human-readable course names.
 - FREE_TIER_ENABLED kill switch: rejects free-tier paths everywhere, not just /courses. Verified via curl with flag false (503) and true (200). Reset to false post-verification.
 - Block 4 (Stripe coupons + email template upgrade) is next.
+- Free tier lifecycle: 14-day initial polling window, up to 2 renewals via Stripe coupon (3 polling windows total, 42 days max alert lifetime), then final_expired.
 
 Bugs identified during verification (filed as ClickUp tickets under master 86ahavm5n):
 1. 86ahbkw2n — Free-tier expiry email copy says "You have 2 renewals remaining" but renewals_used schema and architectural intent suggest 1 free renewal max. Diagnose before Block 4 ships email template work.
