@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from datetime import datetime, timezone
+from typing import Optional
 
 from app.config import settings
 from app.database import supabase_admin
@@ -116,7 +117,7 @@ async def _transition_final_expired(alert_id: str, user_id: str, now_iso: str) -
         )
 
         # Generate Stripe promo code — skipped if STRIPE_FREE_TIER_COUPON_ID not configured (Block 4 sets it)
-        discount_code: str | None = None
+        discount_code: Optional[str] = None
         coupon_id = settings.stripe_free_tier_coupon_id
         if coupon_id:
             try:

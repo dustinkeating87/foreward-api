@@ -1,6 +1,7 @@
 import os
 import httpx
 import logging
+from typing import Optional
 
 log = logging.getLogger(__name__)
 
@@ -87,7 +88,7 @@ def send_free_tier_expiry_email(to: str, alert_id: str, renewals_used: int, rene
     )
 
 
-def send_final_expiry_email(to: str, discount_code: str | None) -> None:
+def send_final_expiry_email(to: str, discount_code: Optional[str]) -> None:
     # Signature frozen: Block 4 replaces body with SendGrid template call, not this signature.
     coupon_section = (
         f"\n\nAs a thank-you for trying Good Lie Golf, here's 50% off your first month: {discount_code}\n"
