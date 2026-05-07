@@ -1,6 +1,5 @@
 import logging
 import os
-import re
 import secrets
 from datetime import datetime, timedelta, timezone
 
@@ -13,6 +12,8 @@ from app.database import supabase_admin
 from app.ip_rate_limit import check_ip_rate_limit
 from app.twilio_lookup import LookupBlocked, check_phone
 from app.util.phone import hash_phone, is_valid_e164
+# Python 3.9 compat: see app/util/dates.py
+from app.util.dates import _parse_iso
 
 log = logging.getLogger(__name__)
 
@@ -60,14 +61,6 @@ def _send_sms(to: str, body: str) -> None:
 
 def _generate_code() -> str:
     return f"{secrets.randbelow(1_000_000):06d}"
-
-
-def _parse_iso(ts: str) -> datetime:
-    # Python 3.9 fromisoformat rejects fractional seconds unless exactly 0, 3, or 6 digits.
-    # Supabase/PostgREST can return any precision. Normalize to 6 digits before parsing.
-    ts = ts.replace("Z", "+00:00")
-    ts = re.sub(r"\.(\d+)(?=[+-])", lambda m: "." + m.group(1).ljust(6, "0")[:6], ts)
-    return datetime.fromisoformat(ts)
 
 
 @router.post("/send-verification-code")

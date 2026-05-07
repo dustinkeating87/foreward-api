@@ -3,6 +3,7 @@ from app.schemas import SignupRequest, LoginRequest
 from app.database import supabase, supabase_admin
 from app.dependencies import get_current_user
 from datetime import datetime, timezone, timedelta
+from app.util.dates import _parse_iso
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -90,7 +91,8 @@ def update_me(body: dict, current_user=Depends(get_current_user)):
     profile = result.data or {}
     last_updated = profile.get("notify_updated_at")
     if last_updated:
-        last_updated_dt = datetime.fromisoformat(last_updated.replace("Z", "+00:00"))
+        # Python 3.9 compat: see app/util/dates.py
+        last_updated_dt = _parse_iso(last_updated)
         if datetime.now(timezone.utc) - last_updated_dt < timedelta(hours=24):
             raise HTTPException(status_code=429, detail="Notification preferences can only be updated once every 24 hours")
 

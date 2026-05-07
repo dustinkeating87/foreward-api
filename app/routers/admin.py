@@ -3,6 +3,7 @@ from app.database import supabase_admin
 from app.dependencies import get_current_user
 from app.config import settings
 from app.email import send_email, send_balance_alarm_email, send_balance_recovery_email
+from app.util.dates import _parse_iso
 from collections import Counter
 from datetime import datetime, timezone, timedelta
 import httpx
@@ -144,7 +145,8 @@ async def scraper_heartbeat(request: Request):
 def _compute_health(health: dict) -> dict:
     last_heartbeat = health.get("last_heartbeat")
     if last_heartbeat:
-        last_dt = datetime.fromisoformat(last_heartbeat.replace("Z", "+00:00"))
+        # Python 3.9 compat: see app/util/dates.py
+        last_dt = _parse_iso(last_heartbeat)
         minutes_ago = (datetime.now(timezone.utc) - last_dt).total_seconds() / 60
         is_healthy = minutes_ago < 5
     else:

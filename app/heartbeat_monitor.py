@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 
 from app.database import supabase_admin
 from app.email import send_heartbeat_alarm_email, send_heartbeat_recovery_email
+from app.util.dates import _parse_iso
 
 log = logging.getLogger(__name__)
 
@@ -27,7 +28,8 @@ async def check_heartbeat_staleness() -> None:
         if not last_hb:
             return
 
-        last_dt = datetime.fromisoformat(last_hb.replace("Z", "+00:00"))
+        # Python 3.9 compat: see app/util/dates.py
+        last_dt = _parse_iso(last_hb)
         seconds_stale = int((datetime.now(timezone.utc) - last_dt).total_seconds())
         is_stale = seconds_stale >= THRESHOLD
 
