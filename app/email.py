@@ -69,3 +69,39 @@ def send_heartbeat_recovery_email(was_stale_seconds: int, threshold_seconds: int
         f"Scraper worker heartbeat has recovered.\n\nThreshold: {threshold_seconds}s.",
         from_addr=os.environ.get("ALARM_EMAIL_FROM", "hello@goodlie.golf"),
     )
+
+
+def send_free_tier_expiry_email(to: str, alert_id: str, renewals_used: int, renewal_link: str) -> None:
+    # Signature frozen: Block 4 replaces body with SendGrid template call, not this signature.
+    renewals_remaining = 2 - renewals_used
+    plural = "s" if renewals_remaining != 1 else ""
+    send_email(
+        to,
+        "Good Lie Golf — no tee times opened up in your window",
+        (
+            f"Unfortunately no tee times opened up matching your alert during the 14-day window.\n\n"
+            f"You have {renewals_remaining} renewal{plural} remaining.\n\n"
+            f"Renew your alert (one click): {renewal_link}\n\n"
+            "You can also edit your criteria before renewing by visiting goodlie.golf."
+        ),
+    )
+
+
+def send_final_expiry_email(to: str, discount_code: str | None) -> None:
+    # Signature frozen: Block 4 replaces body with SendGrid template call, not this signature.
+    coupon_section = (
+        f"\n\nAs a thank-you for trying Good Lie Golf, here's 50% off your first month: {discount_code}\n"
+        "This code expires in 7 days. Redeem at goodlie.golf/billing."
+        if discount_code
+        else ""
+    )
+    send_email(
+        to,
+        "Good Lie Golf — your free alert period has ended",
+        (
+            "Your free alert has run through all 3 polling windows (42 days) without a match.\n\n"
+            "Subscribe to Good Lie Golf for unlimited real-time alerts at $9.99/mo.\n"
+            "Visit goodlie.golf to get started."
+            f"{coupon_section}"
+        ),
+    )
