@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     success_url: str = "http://localhost:3000/success"
     cancel_url: str = "http://localhost:3000/cancel"
     free_tier_enabled: bool = False
+    frontend_url: str = "http://localhost:3000"
+    stripe_free_tier_coupon_id: str = ""
 
     model_config = {"env_file": ".env"}
 
