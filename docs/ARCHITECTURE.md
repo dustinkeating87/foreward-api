@@ -1,6 +1,6 @@
 # Good Lie Golf — Architecture & Decision Log
 
-**Last verified:** 2026-05-06 (Block 1: free-tier schema migration, ARCHITECTURE.md restored to version control)
+**Last verified:** 2026-05-07 (Block 4a: SendGrid Dynamic Templates for free-tier expiry emails)
 **Maintained by:** Claude sessions, in collaboration with Dustin
 **Read this file at the start of any Good Lie Golf work.** It is the source of truth for how the app is built. ClickUp space `Good Lie Golf` (id `901313780791`) is the source of truth for *open work*. Both must be checked. If you make architectural decisions or learn schema details during a session, update this file before ending the session.
 
@@ -634,10 +634,11 @@ Abandoned-checkout:  Stripe Customer object created on checkout-start but no sub
 ```
 Auth
   POST   /auth/signup
+  POST   /auth/signup-free-tier         ← FREE_TIER_ENABLED gate; consumes verification_token, creates auth user with tier=free
   POST   /auth/login
   GET    /auth/me
   POST   /auth/send-verification-code   ← FREE_TIER_ENABLED gate; Twilio Lookup + IP rate limit + phone dedupe + SMS send
-  POST   /auth/verify-phone             ← FREE_TIER_ENABLED gate; validates OTP, returns verification_token (consumed by Block 5)
+  POST   /auth/verify-phone             ← FREE_TIER_ENABLED gate; validates OTP, returns verification_token (consumed by /auth/signup-free-tier)
   POST   /auth/resend-verification-code ← FREE_TIER_ENABLED gate; 60s cooldown, max 3 resends per code
 
 Alerts (user-facing)
@@ -691,7 +692,7 @@ Admin
 - Project ID: `7c8fa4ed-d992-4f5d-a78b-907ed5fd4e44`
 - Service: `web` (id `0aa1761e-7bd3-4d72-9877-0968a14f5974`)
 - Public URL: `https://web-production-b24db.up.railway.app`
-- 21 service env vars (added 2026-05-03: `ALARM_THRESHOLD_POLLS=10`, `ALARM_EMAIL_TO=hello@goodlie.golf`, `ALARM_EMAIL_FROM=hello@goodlie.golf`)
+- 24 service env vars (added 2026-05-03: `ALARM_THRESHOLD_POLLS=10`, `ALARM_EMAIL_TO=hello@goodlie.golf`, `ALARM_EMAIL_FROM=hello@goodlie.golf`; added 2026-05-07: `SENDGRID_TEMPLATE_FREE_TIER_EXPIRY_1`, `SENDGRID_TEMPLATE_FREE_TIER_EXPIRY_2`, `SENDGRID_TEMPLATE_FREE_TIER_EXPIRY_3`)
 
 ### Supabase
 - Project ID: `offtdltmvjfizkoeywei`
@@ -771,6 +772,10 @@ Admin
 
 22. **Supabase SQL editor shows "0 rows" for UPDATE without RETURNING.** The editor reports "0 rows" for any DML statement that doesn't include a `RETURNING` clause, regardless of how many rows were actually affected. Always append `RETURNING id` (or similar) when row count matters during a test or migration verify.
 
+23. **Free-tier first_name fallback is hardcoded to "there"** in expiry email templates. `user_profiles` has no first_name column. Acceptable for launch since most users won't notice "Hey there," in a transactional email. Worth fixing once free-tier flows have real user data.
+
+24. **`COURSE_DISPLAY_NAMES` dict in `app/util/courses.py` is hardcoded** and won't reflect upstream renames automatically. Scraper fetches canonical names from external APIs at runtime (`sent_slots.course_name`); the dict is for email/SMS copy where no `sent_slots` row exists yet. Reconcile against scraper's runtime names ~quarterly.
+
 ---
 
 ## Outstanding ClickUp tasks (snapshot 2026-05-03 afternoon)
@@ -794,6 +799,7 @@ ClickUp is the live source of truth — this list is point-in-time.
 - 🔵 `86ah69y6d` — Verify `PROXY_URLS` env var on `resourceful-delight` (worker still has both legacy + plural)
 - 🔵 `86ah8d3mf` — **Verify Lakeview code in `tee_sniper.py`.** `grep -ri lakeview ~/foreward-scraper/`. If dead code, delete. If reachable but unwired, decide: revive as Lakeview-direct platform (richer data than GolfNow proxy, but Cloudflare-fragile) OR consolidate on GolfNow path.
 - 🔵 `86ah8d3v1` — **Data-drive admin dashboard platform cards** (Lovable). Currently hardcodes `[GTG, GolfNow, EZLinks, Chronogolf]`. Should iterate over `scraper_health.slots_last_poll` keys. Removes the retired-EZLinks-still-shown bug.
+- 🔵 `86ahc0b9e` — Free-tier Block 4b: Stripe coupons + email integration (deferred from Block 4 split, post-launch)
 - ⚪ `86ah8bnp3` — Credentials & secrets reference (living doc; update as things change)
 - ⚪ `86ah8bnjk` — Quarterly DB backup restore test (first due 2026-08-03)
 - (no ID yet) — Complete `GTG_ACCOUNTS` plural migration — worker still reads singular
@@ -807,12 +813,15 @@ ClickUp is the live source of truth — this list is point-in-time.
 - 🟠 `86ah69yn2` — Fired-alert UX redesign — Lovable phase shipped 2026-05-03 morning
 - 🔵 `86ah7atdw` — Public activity ticker — backend done; Lovable phase shipped 2026-05-03 morning
 - ⚪ `86ah69ypk` — Add `noindex` meta tag on `/admin` route — Lovable prompt queued
+- 🟠 `86ahc05ry` — Lovable: build `/subscribe` redirect route for email CTAs (depends on Lovable; CTAs in Block 4a templates point here)
 
 **Marketing & Launch**
 - 🟠 `86ah69yrf` — Instagram content kit for `@playgoodlie`
 - 🔵 `86ah69ytx` — OG image upgrade
 - ⚪ `86ah69yw6` — Meta reclaim attempt for `@goodliegolf`
 - ⚪ `86ah8ag8y` — Enable Stripe abandoned-checkout recovery emails
+- 🔵 `86ahc027p` — Bug: /auth/signup-free-tier returns identical 401 for three distinct failure modes (subtask of master `86ahavm5n`)
+- 🔵 `86ahc02dc` — Bug: /auth/send-verification-code has no phone-ownership check (subtask of master `86ahavm5n`)
 
 🔴 urgent · 🟠 high · 🔵 normal · ⚪ low
 
@@ -829,6 +838,50 @@ Fix (commits on main, 2026-05-07): removed the `used` check from `signup_free_ti
 AC1 (happy path, real phone) still pending: verification_token for +16475155754 expired before redeploy. Fresh SMS cycle required — resuming tomorrow.
 
 Lesson: a single boolean used to mean two different things across two endpoints. Flag for any future block touching `phone_verification_codes` — see Known Issues note on the table above.
+
+### 2026-05-07 (Block 4a — SendGrid Dynamic Templates for free-tier expiry emails)
+
+Block 4 originally scoped both SendGrid template upgrades AND Stripe 50% coupon generation. Split during planning into:
+- Block 4a (this entry): SendGrid Dynamic Templates only — shipped this session
+- Block 4b (deferred, ClickUp `86ahc0b9e`): Stripe coupon generation + frontend checkout flow
+
+Rationale: coupons are conversion optimization with no audience pre-launch (FREE_TIER_ENABLED=false). Templates are foundational. Splitting unblocks Block 5 (Lovable signup) faster.
+
+**Implementation (commit c4ea790 + earlier slug-dict commit):**
+- Three SendGrid Dynamic Templates created via API on 2026-05-07:
+  - Expiry 1 (First Window): `d-f53c968e8bb645a0ba98844549b2d2f1`
+  - Expiry 2 (Last Renewal): `d-bfbc0e264a2e4092ab236e6c594f7611`
+  - Expiry 3 (Final): `d-af240773d6ec40899f6c20ae9c685dcf`
+- Templates use Handlebars `{{first_name}}` and `{{course_name}}`. CTAs hardcoded to `https://goodlie.golf/subscribe` (frontend route TBD, ClickUp `86ahc05ry`).
+- New helper `app/email.py::send_dynamic_template()` — non-raising, follows alarm-email failure-handling contract.
+- New module `app/util/courses.py` — `COURSE_DISPLAY_NAMES` dict (22 courses across GolfNow + Chronogolf), `slug_to_display_name()`, `courses_to_display_string()`. GTG courses fall through to title-case fallback (no static slug list; names come from API at runtime).
+- Three new Railway env vars on `web` service: `SENDGRID_TEMPLATE_FREE_TIER_EXPIRY_1/2/3`.
+- Plaintext expiry emails in `free_tier_expiry_loop` swapped for `send_dynamic_template()` calls.
+- From-name: `Good Lie <hello@goodlie.golf>` (locked branding decision).
+- `first_name` source: hardcoded fallback `"there"` — `user_profiles` has no first_name column. Future block to address properly.
+- Plan doc: `foreward-api/docs/superpowers/plans/2026-05-08-block-4a-sendgrid-templates.md`
+- 57/57 tests passing pre-push.
+
+**Verified mid-session (pre-implementation):**
+- `/auth/signup-free-tier` confirmed working end-to-end. Test user `dustinkeating87+freetier1@gmail.com` (UID `87ba8c28-db02-4cd6-8641-6be29dd41f30`) created via direct API call. `phone_verified=true`, `phone_hash` populated, `free_tier_used_at` set, `is_active=false`, `is_beta=false`, `trial_end=NULL`.
+
+**Verification deferred to next session:**
+- Manual expiry-transition trigger + email-arrival check. Tomorrow before content blocks.
+
+**Verification artifacts (cleanup post-launch):**
+- Test user `dustinkeating87+freetier1@gmail.com` (UID `87ba8c28-db02-4cd6-8641-6be29dd41f30`) joins existing `+test@gmail.com` test user (UID `76f71a7d-...`) on the post-launch deletion list. Both block fresh signups on the same phone via `phone_hash` uniqueness.
+
+**Bugs identified (filed as subtasks of master `86ahavm5n`):**
+- `86ahc027p` — `/auth/signup-free-tier` returns identical 401 detail for three distinct failure modes (token_not_found, expired, phone_mismatch). Server logs already differentiate. Cost ~30 min in this session.
+- `86ahc02dc` — `/auth/send-verification-code` has no phone-ownership check; typos send OTPs to strangers.
+
+**Frontend dependency filed:**
+- `86ahc05ry` — Lovable: `/subscribe` redirect route. New email CTAs link here; route doesn't exist yet.
+
+**Lessons worth keeping:**
+- Splitting tickets at planning time when scope expands beyond a session > half-shipping. Block 4 → 4a + 4b cleanly.
+- Stale verification tokens cause same 401 as wrong-phone tokens. Distinct error messages cost nothing and save real debugging time.
+- Phase 1 (gather facts) before Phase 2 (form hypothesis) caught the mismatched-phone diagnosis in one DB query rather than another guess-and-check loop.
 
 ### 2026-05-07 (Block 3 — free-tier alert lifecycle, VERIFIED)
 
