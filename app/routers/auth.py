@@ -58,7 +58,7 @@ def signup_free_tier(body: SignupFreeTierRequest):
     # on 0 rows in postgrest-py 0.18, causing AttributeError on .data access.
     token_rows = (
         supabase_admin.table("phone_verification_codes")
-        .select("id, used, token_expires_at, phone_hash")
+        .select("id, token_expires_at, phone_hash")
         .eq("verification_token", body.verification_token)
         .limit(1)
         .execute()
@@ -66,8 +66,8 @@ def signup_free_tier(body: SignupFreeTierRequest):
     if not token_rows:
         raise HTTPException(status_code=401, detail="Invalid or expired verification token")
     row = token_rows[0]
-    if row.get("used"):
-        raise HTTPException(status_code=401, detail="Invalid or expired verification token")
+    # Note: used=True is set by verify_phone to mark the OTP consumed (not the verification_token).
+    # Do not gate on used here — check token_expires_at and phone_hash instead.
     # Python 3.9 compat: see app/util/dates.py
     if datetime.now(timezone.utc) > _parse_iso(row["token_expires_at"]):
         raise HTTPException(status_code=401, detail="Invalid or expired verification token")
@@ -128,7 +128,7 @@ def signup_free_tier(body: SignupFreeTierRequest):
         }).eq("id", user_id).execute()
 
         supabase_admin.table("phone_verification_codes").update({
-            "used": True,
+            "token_expires_at": datetime.now(timezone.utc).isoformat(),
         }).eq("id", row["id"]).execute()
     except Exception:
         try:

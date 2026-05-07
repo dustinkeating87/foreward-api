@@ -192,10 +192,12 @@ Short-lived OTP rows for free-tier phone verification (Block 2).
 | token_expires_at | timestamptz | YES | — | Token TTL: verified_at + 30 min |
 | resend_count | int | NO | 0 | Total resends since last send-verification-code |
 | last_resend_at | timestamptz | YES | — | Enforces 60s cooldown between resends |
-| used | boolean | NO | false | True after successful verify |
+| used | boolean | NO | false | True after OTP verified by `verify_phone` (marks OTP consumed, NOT verification_token spent). `signup_free_tier` must NOT gate on this column — see Known Issues. |
 
 **Index:** `ix_pvc_phone_hash` on `(phone_hash)`.
 **RLS:** enabled, service-role only (API uses `supabase_admin` for all reads/writes).
+
+**Known issue — `used` column overload (fixed 2026-05-07, Block 5a):** `verify_phone` sets `used=True` when issuing the verification_token (correct — prevents OTP reuse). `signup_free_tier` originally also checked `used` to guard against token replay — but since `used` is always True for any legitimately issued token, this made the happy path unreachable (always 401). Fixed by removing the `used` check from `signup_free_tier` and expiring the token post-signup via `token_expires_at = NOW()` instead. Any future block that touches this table should treat `used` as "OTP phase done" only, never as "signup phase done."
 
 ### `scraper_health`
 Single-row health table for the worker.
@@ -817,6 +819,16 @@ ClickUp is the live source of truth — this list is point-in-time.
 ---
 
 ## Decision log
+
+### 2026-05-07 (Block 5a addendum — signup-free-tier `used` flag bug, FIXED)
+
+Root cause: `phone_verification_codes.used` was set to True by `verify_phone` (correct — marks OTP consumed) then checked by `signup_free_tier` as a proxy for "verification_token already spent." Since every legitimately issued token has `used=True`, the happy path was unreachable — every call returned 401.
+
+Fix (commits on main, 2026-05-07): removed the `used` check from `signup_free_tier`; post-signup invalidation now sets `token_expires_at = NOW()` instead of re-setting `used=True`. Bogus/no-token path (401 on missing row) and expired-token path (401 on token_expires_at) are unaffected. 11 unit tests pass. Bogus-token 401 confirmed against deployed Railway API post-deploy.
+
+AC1 (happy path, real phone) still pending: verification_token for +16475155754 expired before redeploy. Fresh SMS cycle required — resuming tomorrow.
+
+Lesson: a single boolean used to mean two different things across two endpoints. Flag for any future block touching `phone_verification_codes` — see Known Issues note on the table above.
 
 ### 2026-05-07 (Block 3 — free-tier alert lifecycle, VERIFIED)
 

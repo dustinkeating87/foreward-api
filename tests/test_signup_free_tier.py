@@ -25,7 +25,8 @@ def _future_iso():
 
 
 def _valid_token_row():
-    return {"id": "pvc-id-1", "used": False, "token_expires_at": _future_iso(), "phone_hash": PHONE_HASH}
+    # used is not selected by signup_free_tier — only id, token_expires_at, phone_hash
+    return {"id": "pvc-id-1", "token_expires_at": _future_iso(), "phone_hash": PHONE_HASH}
 
 
 def _mock_admin(token_row=None, phone_unique=True, create_user_exc=None, update_exc=None):
@@ -99,18 +100,10 @@ def test_ac1_happy_path_returns_201_shape():
     assert "refresh_token" in result
 
 
-# ── AC2: Used token → 401 ─────────────────────────────────────────────────────
-
-def test_ac2_used_token_returns_401():
-    from app.routers.auth import signup_free_tier
-    used_row = {**_valid_token_row(), "used": True}
-    mock_admin = _mock_admin(token_row=used_row)
-    with patch("app.routers.auth.settings") as ms, \
-         patch("app.routers.auth.supabase_admin", mock_admin):
-        ms.free_tier_enabled = True
-        with pytest.raises(HTTPException) as exc:
-            signup_free_tier(_request())
-    assert exc.value.status_code == 401
+# ── AC2: Expired token → 401 (used=True from verify_phone is NOT checked) ──────
+# Regression: verify_phone sets used=True on the row when issuing the
+# verification_token. signup_free_tier must NOT check used — it is always True
+# for any legitimately issued token. Only token_expires_at gates validity here.
 
 
 # ── AC3: Expired token → 401 ──────────────────────────────────────────────────
@@ -238,4 +231,31 @@ def test_regression_new_phone_uniqueness_check_does_not_crash():
         ms.free_tier_enabled = True
         result = signup_free_tier(_request())
     # Reaches create_user, not crashes
+    assert result["user"]["tier"] == "free"
+
+
+def test_regression_verify_phone_used_flag_does_not_block_signup():
+    """Regression for Block 5a bug: verify_phone sets used=True on the
+    phone_verification_codes row when it issues the verification_token (to prevent
+    OTP reuse). signup_free_tier must accept tokens with used=True — it is the
+    normal state for any legitimately issued token. Only token_expires_at gates
+    validity. Bug: signup_free_tier was checking used and returning 401 on every
+    real token, making the happy path unreachable."""
+    from app.routers.auth import signup_free_tier
+    # Simulate a row as verify_phone leaves it: used=True, verification_token set,
+    # token_expires_at in the future. signup_free_tier does not select 'used', so
+    # the mock row only needs the fields it actually reads.
+    row_as_verify_phone_leaves_it = {
+        "id": "pvc-id-1",
+        "token_expires_at": _future_iso(),
+        "phone_hash": PHONE_HASH,
+    }
+    mock_admin = _mock_admin(token_row=row_as_verify_phone_leaves_it, phone_unique=True)
+    mock_supa = _mock_supabase()
+    with patch("app.routers.auth.settings") as ms, \
+         patch("app.routers.auth.supabase_admin", mock_admin), \
+         patch("app.routers.auth.supabase", mock_supa):
+        ms.free_tier_enabled = True
+        result = signup_free_tier(_request())
+    assert result["token_type"] == "bearer"
     assert result["user"]["tier"] == "free"
