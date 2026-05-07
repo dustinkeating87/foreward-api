@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, HTTPException, Depends
 from app.schemas import SignupRequest, LoginRequest, SignupFreeTierRequest
 from app.database import supabase, supabase_admin
@@ -6,6 +7,8 @@ from app.config import settings
 from datetime import datetime, timezone, timedelta
 from app.util.dates import _parse_iso
 from app.util.phone import hash_phone, is_valid_e164
+
+log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -64,14 +67,19 @@ def signup_free_tier(body: SignupFreeTierRequest):
         .execute()
     ).data or []
     if not token_rows:
+        log.warning("signup_free_tier: 401 path=token_not_found tok_prefix=%s", body.verification_token[:8])
         raise HTTPException(status_code=401, detail="Invalid or expired verification token")
     row = token_rows[0]
     # Note: used=True is set by verify_phone to mark the OTP consumed (not the verification_token).
     # Do not gate on used here — check token_expires_at and phone_hash instead.
     # Python 3.9 compat: see app/util/dates.py
-    if datetime.now(timezone.utc) > _parse_iso(row["token_expires_at"]):
+    now_utc = datetime.now(timezone.utc)
+    expires = _parse_iso(row["token_expires_at"])
+    if now_utc > expires:
+        log.warning("signup_free_tier: 401 path=expired row_id=%s now=%s expires=%s", row["id"], now_utc.isoformat(), expires.isoformat())
         raise HTTPException(status_code=401, detail="Invalid or expired verification token")
     if row["phone_hash"] != phone_hash:
+        log.warning("signup_free_tier: 401 path=phone_mismatch row_id=%s db_prefix=%s req_prefix=%s", row["id"], row["phone_hash"][:8], phone_hash[:8])
         raise HTTPException(status_code=401, detail="Invalid or expired verification token")
 
     # Phone uniqueness: one free-tier account per phone number (lifetime)
