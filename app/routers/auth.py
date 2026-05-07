@@ -54,16 +54,18 @@ def signup_free_tier(body: SignupFreeTierRequest):
     phone_hash = hash_phone(body.phone_e164)
 
     # Validate verification token
-    row_result = (
+    # Use .limit(1).execute() — maybe_single().execute() returns None (not APIResponse)
+    # on 0 rows in postgrest-py 0.18, causing AttributeError on .data access.
+    token_rows = (
         supabase_admin.table("phone_verification_codes")
         .select("id, used, token_expires_at, phone_hash")
         .eq("verification_token", body.verification_token)
-        .maybe_single()
+        .limit(1)
         .execute()
-    )
-    row = row_result.data
-    if not row:
+    ).data or []
+    if not token_rows:
         raise HTTPException(status_code=401, detail="Invalid or expired verification token")
+    row = token_rows[0]
     if row.get("used"):
         raise HTTPException(status_code=401, detail="Invalid or expired verification token")
     # Python 3.9 compat: see app/util/dates.py
@@ -73,15 +75,15 @@ def signup_free_tier(body: SignupFreeTierRequest):
         raise HTTPException(status_code=401, detail="Invalid or expired verification token")
 
     # Phone uniqueness: one free-tier account per phone number (lifetime)
-    existing = (
+    existing_rows = (
         supabase_admin.table("user_profiles")
         .select("id")
         .eq("phone_hash", phone_hash)
         .not_.is_("free_tier_used_at", "null")
-        .maybe_single()
+        .limit(1)
         .execute()
-    )
-    if existing.data:
+    ).data or []
+    if existing_rows:
         raise HTTPException(status_code=409, detail="Phone number already associated with a free-tier account")
 
     # Create auth user

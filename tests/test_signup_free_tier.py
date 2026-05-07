@@ -29,24 +29,23 @@ def _valid_token_row():
 
 
 def _mock_admin(token_row=None, phone_unique=True, create_user_exc=None, update_exc=None):
-    """Build a supabase_admin mock for the signup-free-tier flow."""
+    """Build a supabase_admin mock for the signup-free-tier flow.
+
+    Uses .limit(1).execute() chains matching the fixed implementation.
+    token_row=None simulates 0 rows (execute().data returns []).
+    token_row=<dict> simulates 1 matching row (execute().data returns [row]).
+    """
     mock = MagicMock()
 
-    # phone_verification_codes lookup
-    pvc_select = MagicMock()
-    pvc_select.eq.return_value.maybe_single.return_value.execute.return_value.data = token_row
-    mock.table.return_value.select.return_value = pvc_select
-
-    # Override table() to return appropriate mock per table name
     def table_factory(name):
         t = MagicMock()
         if name == "phone_verification_codes":
-            t.select.return_value.eq.return_value.maybe_single.return_value.execute.return_value.data = token_row
+            pvc_data = [token_row] if token_row is not None else []
+            t.select.return_value.eq.return_value.limit.return_value.execute.return_value.data = pvc_data
             t.update.return_value.eq.return_value.execute.return_value.data = [{"id": "pvc-id-1"}]
         elif name == "user_profiles":
-            t.select.return_value.eq.return_value.not_.is_.return_value.maybe_single.return_value.execute.return_value.data = (
-                None if phone_unique else {"id": "existing-user"}
-            )
+            up_data = [] if phone_unique else [{"id": "existing-user"}]
+            t.select.return_value.eq.return_value.not_.is_.return_value.limit.return_value.execute.return_value.data = up_data
             if update_exc:
                 t.update.return_value.eq.return_value.execute.side_effect = update_exc
             else:
@@ -190,7 +189,6 @@ def test_ac7_compensating_delete_on_profile_update_failure():
         with pytest.raises(HTTPException) as exc:
             signup_free_tier(_request())
     assert exc.value.status_code == 500
-    # Verify compensating delete was called
     mock_admin.auth.admin.delete_user.assert_called_once_with(USER_ID)
 
 
@@ -208,5 +206,36 @@ def test_ac8_paid_signup_unaffected():
         result = signup(SignupRequest(email=EMAIL, password=PASSWORD))
     assert "access_token" in result
     assert result["user"]["email"] == EMAIL
-    # Paid signup has no "tier" field
     assert "tier" not in result["user"]
+
+
+# ── Regression: maybe_single returns None on 0 rows ──────────────────────────
+
+def test_regression_no_token_row_returns_401_not_500():
+    """Regression for postgrest-py 0.18 bug: maybe_single().execute() returns None
+    (not APIResponse) on 0 rows. Switching to limit(1).execute() fixes this.
+    token_row=None → data=[] → must return 401, not AttributeError/500."""
+    from app.routers.auth import signup_free_tier
+    mock_admin = _mock_admin(token_row=None)  # simulates 0 rows: data=[]
+    with patch("app.routers.auth.settings") as ms, \
+         patch("app.routers.auth.supabase_admin", mock_admin):
+        ms.free_tier_enabled = True
+        with pytest.raises(HTTPException) as exc:
+            signup_free_tier(_request())
+    assert exc.value.status_code == 401
+
+
+def test_regression_new_phone_uniqueness_check_does_not_crash():
+    """Regression: user_profiles uniqueness check also used maybe_single().
+    New phone (0 rows) must not AttributeError on .data — must proceed to create user."""
+    from app.routers.auth import signup_free_tier
+    # token_row present (valid), phone_unique=True (0 rows on uniqueness check → allow through)
+    mock_admin = _mock_admin(token_row=_valid_token_row(), phone_unique=True)
+    mock_supa = _mock_supabase()
+    with patch("app.routers.auth.settings") as ms, \
+         patch("app.routers.auth.supabase_admin", mock_admin), \
+         patch("app.routers.auth.supabase", mock_supa):
+        ms.free_tier_enabled = True
+        result = signup_free_tier(_request())
+    # Reaches create_user, not crashes
+    assert result["user"]["tier"] == "free"
