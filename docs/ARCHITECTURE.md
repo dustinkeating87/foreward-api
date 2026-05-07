@@ -765,6 +765,10 @@ Admin
 
 19. **Possible vestigial Lakeview code in `tee_sniper.py`.** Earlier versions of this doc described an inline Lakeview scraper with cookie refresh / Cloudflare 403 handling. No `[lakeview]` log lines fire at runtime, so the code (if it exists) isn't called from the main poll loop. Next session: `grep -ri lakeview ~/foreward-scraper/`. If dead code, delete. If reachable but unwired, decide whether to revive (Lakeview-direct gives richer data than GolfNow proxy) or consolidate on GolfNow path.
 
+21. **Local Python 3.9.6 vs Railway Python 3.11 — `fromisoformat` drift.** Python 3.9's `datetime.fromisoformat` rejects timestamps with non-6-digit fractional seconds (e.g. 5-digit microseconds). Supabase/PostgREST can return any precision. Railway runs 3.11 (full ISO 8601 support) so prod is unaffected, but local runs can crash. The fix pattern is `_parse_iso()` in `app/routers/phone_verification.py` (added Block 2): normalize fractional seconds to 6 digits with a regex before calling `fromisoformat`. Three out-of-scope call sites still use the raw pattern: `heartbeat_monitor.py:30`, `routers/auth.py:93`, `routers/admin.py:147` — tracked in ClickUp `86ahbacxw`.
+
+22. **Supabase SQL editor shows "0 rows" for UPDATE without RETURNING.** The editor reports "0 rows" for any DML statement that doesn't include a `RETURNING` clause, regardless of how many rows were actually affected. Always append `RETURNING id` (or similar) when row count matters during a test or migration verify.
+
 ---
 
 ## Outstanding ClickUp tasks (snapshot 2026-05-03 afternoon)
@@ -824,10 +828,11 @@ New DB table: `phone_verification_codes` — migration file committed but Dustin
 
 Verification token design: on successful `verify-phone`, a URL-safe UUID token is stored on the `phone_verification_codes` row and returned to the client. Block 5 (Lovable signup flow) will submit this token to prove phone was verified before account creation.
 
-**Dustin action still required before Block 2 is fully live locally:**
-1. Apply `20260506_add_phone_verification_codes.sql` via Supabase SQL Editor
-2. Add `TWILIO_SID`, `TWILIO_TOKEN`, `TWILIO_FROM` to Railway `web` service env vars
-3. Run local acceptance tests (AC2–7) with `FREE_TIER_ENABLED=true`
+**AC verification results (2026-05-06):** AC1 (503 guard, prod), AC2 (happy path), AC3 (IP rate limit), AC5 fast-path (resend cooldown), AC6 (single-use + expiry) all PASS. AC4 (phone uniqueness) and AC5 max-3 cap deferred to code-review-only — runtime verification blocked by FK constraint on `user_profiles` (AC4) and 3-min wait (AC5 cap). Full details in ClickUp `86ahaza0k` closeout comment.
+
+**AC5 spec gap:** first resend has no cooldown — `last_resend_at` is NULL on row creation, so the 60s check is bypassed on the first resend. Cooldown only applies resend→resend. Flagged for Block 5 fix.
+
+**Python 3.9 / Railway 3.11 patch:** `app/routers/phone_verification.py` has a `_parse_iso()` helper (added this session) that normalizes fractional seconds to 6 digits before calling `fromisoformat`. Applies at the three Supabase timestamp reads (lines 156, 202, 216). Required because Python 3.9 `fromisoformat` rejects non-6-digit microseconds and Supabase/PostgREST can return any precision. Railway runs Python 3.11 — prod unaffected. Three out-of-scope call sites (`heartbeat_monitor.py:30`, `routers/auth.py:93`, `routers/admin.py:147`) remain unpatched; tracked in ClickUp `86ahbacxw`.
 
 ClickUp `86ahaza0k` closed.
 

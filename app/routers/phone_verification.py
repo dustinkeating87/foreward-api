@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 import secrets
 from datetime import datetime, timedelta, timezone
 
@@ -59,6 +60,14 @@ def _send_sms(to: str, body: str) -> None:
 
 def _generate_code() -> str:
     return f"{secrets.randbelow(1_000_000):06d}"
+
+
+def _parse_iso(ts: str) -> datetime:
+    # Python 3.9 fromisoformat rejects fractional seconds unless exactly 0, 3, or 6 digits.
+    # Supabase/PostgREST can return any precision. Normalize to 6 digits before parsing.
+    ts = ts.replace("Z", "+00:00")
+    ts = re.sub(r"\.(\d+)(?=[+-])", lambda m: "." + m.group(1).ljust(6, "0")[:6], ts)
+    return datetime.fromisoformat(ts)
 
 
 @router.post("/send-verification-code")
@@ -144,7 +153,7 @@ def verify_phone(body: VerifyPhoneRequest, request: Request):
     if not row:
         raise HTTPException(status_code=400, detail="Invalid or expired code.")
 
-    expires_at = datetime.fromisoformat(row["expires_at"].replace("Z", "+00:00"))
+    expires_at = _parse_iso(row["expires_at"])
     if now > expires_at:
         raise HTTPException(status_code=400, detail="Invalid or expired code.")
 
@@ -190,7 +199,7 @@ def resend_verification_code(body: ResendCodeRequest, request: Request):
             detail="No pending verification found. Use send-verification-code first.",
         )
 
-    expires_at = datetime.fromisoformat(row["expires_at"].replace("Z", "+00:00"))
+    expires_at = _parse_iso(row["expires_at"])
     if now > expires_at:
         raise HTTPException(
             status_code=400,
@@ -204,7 +213,7 @@ def resend_verification_code(body: ResendCodeRequest, request: Request):
         )
 
     if row["last_resend_at"]:
-        last_resend = datetime.fromisoformat(row["last_resend_at"].replace("Z", "+00:00"))
+        last_resend = _parse_iso(row["last_resend_at"])
         elapsed = (now - last_resend).total_seconds()
         if elapsed < RESEND_COOLDOWN_SECONDS:
             wait = int(RESEND_COOLDOWN_SECONDS - elapsed)
