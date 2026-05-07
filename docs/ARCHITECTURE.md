@@ -83,9 +83,9 @@ Extends `auth.users` 1:1 via `handle_new_user` trigger.
 | notify_updated_at | timestamptz | YES | — | when notification prefs last changed |
 | trial_end | timestamptz | YES | — | 7-day free trial expiry |
 | phone_verified | boolean | NO | false | Set true on successful 6-digit verification at free-tier signup |
-| phone_hash | text | YES | — | SHA-256 hash of E.164 phone for free-tier dedupe. App-level hashing in API |
-| free_tier_used_at | timestamptz | YES | — | Timestamp of free-tier alert creation. Set once, never cleared |
-| final_expired_at | timestamptz | YES | — | Set when user hits final-expiry. Permanently blocks free-tier re-eligibility |
+| free_tier_used_at | timestamptz | YES | — | Block 1 (2026-05-07) — set when user first uses free tier; lifetime once-only |
+| final_expired_at | timestamptz | YES | — | Block 1 — user-level free-tier final expiry timestamp |
+| phone_hash | text | YES | — | Block 2 — SHA-256 hexdigest of E.164 phone (no salt); used for uniqueness check |
 
 **RLS:** `Users can read own profile` — `SELECT` for `public` role where `auth.uid() = id`.
 
@@ -109,11 +109,11 @@ Per-user saved alert criteria.
 | status | text | NO | 'active' | CHECK in (active, fired, expired, paused) |
 | created_at | timestamptz | YES | now() | |
 | updated_at | timestamptz | YES | now() | |
-| is_free_tier | boolean | NO | false | True for free-tier alerts (one-per-phone, 14-day polling cap). False/default for paid |
-| polling_expires_at | timestamptz | YES | — | When polling stops for this free-tier alert. Set on creation and each renewal |
-| renewals_used | integer | NO | 0 | Number of renewals used. Cap = 2 |
-| final_expired_at | timestamptz | YES | — | Set at final expiry |
-| expiry_state | text | YES | — | NULL=active, `expired_pending_renewal`, `final_expired`. CHECK constraint enforced. |
+| is_free_tier | boolean | YES | false | Block 1 (2026-05-07) — true if alert was created under free-tier rules |
+| polling_expires_at | timestamptz | YES | — | Block 1 — 14-day polling window for free-tier alerts; NULL for paid |
+| renewals_used | integer | YES | 0 | Block 1 — count of free-tier renewals used (0 or 1) |
+| expiry_state | text | YES | — | Block 1 — NULL / expired_pending_renewal / final_expired |
+| final_expired_at | timestamptz | YES | — | Block 1 — set when alert hits final expiry on free tier |
 
 **Status semantics (one-shot model, locked 2026-05-03):**
 - `active` — scraper matches against this alert; SMS will fire on next match
@@ -817,6 +817,38 @@ ClickUp is the live source of truth — this list is point-in-time.
 ---
 
 ## Decision log
+
+### 2026-05-07 (Block 3 — free-tier alert lifecycle, VERIFIED)
+
+Block 3 implementation complete and verified in production. 7 commits (b108f76..13d2bde) on foreward-api/main, 21 new tests passing (29 total). Verification script scripts/verify_block_3.py (gitignored) confirmed AC1 (paid no-regression) and AC7 (expiry sweep) PASS against deployed Railway API. Plan doc: foreward-api/docs/superpowers/plans/2026-05-07-block-3-free-tier-alert-lifecycle.md. Master ticket 86ahavm5n. Block 3 ticket 86ahazaza. Closed 86ahbacxw with Task 1.
+
+Schema documentation drift caught and corrected. Block 1 (earlier session) added columns to alert_profiles and user_profiles but did not update this doc. Schema additions logged retroactively above (ARCHITECTURE.md edits A and B in this commit). Lesson: every Block must end with an ARCHITECTURE.md update before close. Adding to session-end checklist.
+
+Key architectural decisions:
+- is_free_tier is per-ALERT (alert_profiles), not per-user. A user can hold paid and free-tier alerts simultaneously. free_tier_used_at on user_profiles is the lifetime once-only flag.
+- Two expiry mechanisms run independently:
+  - Scraper-driven POST /scraper/expire-alerts (60s cadence, date-based, sets status='expired')
+  - In-process free_tier_expiry_loop (5min cadence, polling-window based, transitions expiry_state, sends emails, generates Stripe coupons)
+  - These can race on overlapping rows. Loop wins on state because it updates after. Benign.
+- Railway sleepApplication: false confirmed via Railway API for spirited-youthfulness web service. In-process loop is safe.
+- free_tier_expiry_loop updates BOTH status='expired' AND expiry_state='expired_pending_renewal' on first transition (verified 2026-05-07).
+- New endpoint GET /courses/available-for-free-tier returns {courses, count, available} (NOT bare []) gated behind FREE_TIER_ENABLED env var. Returns 503 when off, 200 with available=false when on but no qualifying paid alerts. Output format is human-readable course names.
+- FREE_TIER_ENABLED kill switch: rejects free-tier paths everywhere, not just /courses. Verified via curl with flag false (503) and true (200). Reset to false post-verification.
+- Block 4 (Stripe coupons + email template upgrade) is next.
+
+Bugs identified during verification (filed as ClickUp tickets under master 86ahavm5n):
+1. 86ahbkw2n — Free-tier expiry email copy says "You have 2 renewals remaining" but renewals_used schema and architectural intent suggest 1 free renewal max. Diagnose before Block 4 ships email template work.
+2. 86ahbkw5h — Dashboard alert toggle on goodlie.golf reflects legacy active column, not canonical status. Alerts with status='fired' display as "on." Update toggle binding.
+3. 86ahbkwf6 — Lovable signup blocker — pre-launch critical. All new users currently routed to Stripe checkout. Free-tier path is unreachable from production frontend.
+4. 86ahbkwka — Courses endpoint returns human-readable names — frontend will need name→slug mapping for rendering.
+5. 86ahbkx68 — Pre-launch checklist: verify ≥5 paid alerts across ≥3 courses before flipping FREE_TIER_ENABLED=true. Resolve Bug 3 (signup wall) before launch.
+
+Pre-launch checklist ticket needed: "Verify ≥5 paid alerts across ≥3 courses before flipping FREE_TIER_ENABLED=true in prod. Then resolve Bug 3 (Lovable signup wall) before launch."
+
+Verification artifacts (cleanup):
+- Test user dustinkeating87+test@gmail.com UID 76f71a7d-5f4b-4284-92cb-6504ec71f7c3 provisioned with phone_hash set manually via SQL. Should be deleted post-launch to free up phone uniqueness on +16475155754.
+- Founder Dentonia alert (id 1a546482-2132-4153-a891-e6f9414e5be8) modified during verification to status='active', date_from=2026-12-01, date_to=2026-12-31. Deleted 2026-05-07 via service role.
+- FREE_TIER_ENABLED reset to false in Railway post-verification.
 
 ### 2026-05-06 (Block 2 — phone verification endpoints)
 
