@@ -5,8 +5,9 @@ from typing import Optional
 
 from app.config import settings
 from app.database import supabase_admin
-from app.email import send_final_expiry_email, send_free_tier_expiry_email
+from app.email import send_dynamic_template
 from app.stripe_coupons import create_one_time_coupon
+from app.util.courses import courses_to_display_string
 from app.util.dates import _parse_iso
 
 log = logging.getLogger(__name__)
@@ -19,7 +20,7 @@ async def check_free_tier_expiry() -> None:
 
         result = await asyncio.to_thread(
             lambda: supabase_admin.table("alert_profiles")
-            .select("id, user_id, renewals_used, polling_expires_at")
+            .select("id, user_id, renewals_used, polling_expires_at, courses")
             .eq("is_free_tier", True)
             .eq("status", "active")
             .is_("expiry_state", "null")
@@ -51,17 +52,18 @@ async def check_free_tier_expiry() -> None:
                 log.info("free_tier_expiry: skip alert=%s — user converted to paid", alert_id)
                 continue
 
+            courses = alert.get("courses") or []
             if renewals_used < 2:
-                await _transition_pending_renewal(alert_id, user_id, renewals_used, now_iso)
+                await _transition_pending_renewal(alert_id, user_id, renewals_used, courses, now_iso)
             else:
-                await _transition_final_expired(alert_id, user_id, now_iso)
+                await _transition_final_expired(alert_id, user_id, courses, now_iso)
 
     except Exception:
         log.exception("check_free_tier_expiry error")
 
 
 async def _transition_pending_renewal(
-    alert_id: str, user_id: str, renewals_used: int, now_iso: str
+    alert_id: str, user_id: str, renewals_used: int, courses: list, now_iso: str
 ) -> None:
     try:
         await asyncio.to_thread(
@@ -82,17 +84,33 @@ async def _transition_pending_renewal(
         to_email = profile.get("notify_email") or profile.get("email")
 
         if to_email:
-            renewal_link = f"{settings.frontend_url}/alerts/{alert_id}/renew"
-            try:
-                await asyncio.to_thread(
-                    lambda e=to_email, aid=alert_id, r=renewals_used, lnk=renewal_link:
-                        send_free_tier_expiry_email(e, aid, r, lnk)
+            # renewals_used=0 -> first window expired (Expiry 1)
+            # renewals_used=1 -> second window expired (Expiry 2)
+            if renewals_used == 0:
+                template_id = settings.sendgrid_template_free_tier_expiry_1
+            else:
+                template_id = settings.sendgrid_template_free_tier_expiry_2
+
+            if not template_id:
+                log.warning(
+                    "free_tier_expiry: template ID not configured for renewals_used=%d alert=%s",
+                    renewals_used, alert_id,
                 )
-            except Exception as exc:
-                log.error("free_tier_expiry: renewal email failed alert=%s — %s", alert_id, exc)
+            else:
+                await asyncio.to_thread(
+                    lambda e=to_email, tid=template_id, c=courses:
+                        send_dynamic_template(
+                            to=e,
+                            template_id=tid,
+                            dynamic_data={
+                                "first_name": "there",
+                                "course_name": courses_to_display_string(c),
+                            },
+                        )
+                )
 
         log.info(
-            "free_tier_expiry: alert=%s → expired_pending_renewal renewals_used=%d",
+            "free_tier_expiry: alert=%s -> expired_pending_renewal renewals_used=%d",
             alert_id,
             renewals_used,
         )
@@ -100,7 +118,7 @@ async def _transition_pending_renewal(
         log.exception("free_tier_expiry: _transition_pending_renewal failed alert=%s", alert_id)
 
 
-async def _transition_final_expired(alert_id: str, user_id: str, now_iso: str) -> None:
+async def _transition_final_expired(alert_id: str, user_id: str, courses: list, now_iso: str) -> None:
     try:
         await asyncio.to_thread(
             lambda aid=alert_id, ts=now_iso: supabase_admin.table("alert_profiles")
@@ -140,12 +158,24 @@ async def _transition_final_expired(alert_id: str, user_id: str, now_iso: str) -
         to_email = profile.get("notify_email") or profile.get("email")
 
         if to_email:
-            try:
-                await asyncio.to_thread(
-                    lambda e=to_email, d=discount_code: send_final_expiry_email(e, d)
+            template_id = settings.sendgrid_template_free_tier_expiry_3
+            if not template_id:
+                log.warning(
+                    "free_tier_expiry: SENDGRID_TEMPLATE_FREE_TIER_EXPIRY_3 not configured alert=%s",
+                    alert_id,
                 )
-            except Exception as exc:
-                log.error("free_tier_expiry: final email failed alert=%s — %s", alert_id, exc)
+            else:
+                await asyncio.to_thread(
+                    lambda e=to_email, tid=template_id, c=courses:
+                        send_dynamic_template(
+                            to=e,
+                            template_id=tid,
+                            dynamic_data={
+                                "first_name": "there",
+                                "course_name": courses_to_display_string(c),
+                            },
+                        )
+                )
 
         log.info(
             "free_tier_expiry: alert=%s user=%s → final_expired coupon=%s",

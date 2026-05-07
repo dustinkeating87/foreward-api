@@ -6,6 +6,51 @@ from typing import Optional
 log = logging.getLogger(__name__)
 
 
+def send_dynamic_template(
+    *,
+    to: str,
+    template_id: str,
+    dynamic_data: dict,
+    from_email: str = "hello@goodlie.golf",
+    from_name: str = "Good Lie",
+) -> bool:
+    """
+    Sends a SendGrid Dynamic Template email.
+
+    Returns True on 2xx, False on failure. Does not raise - failures
+    must never break callers (same contract as existing alarm emails).
+    """
+    sg_key = os.environ.get("SENDGRID_API_KEY", "")
+    if not sg_key:
+        log.warning("send_dynamic_template: SENDGRID_API_KEY not set, skipping to=%s", to)
+        return False
+    if not template_id:
+        log.warning("send_dynamic_template: template_id is empty, skipping to=%s", to)
+        return False
+    try:
+        r = httpx.post(
+            "https://api.sendgrid.com/v3/mail/send",
+            headers={
+                "Authorization": f"Bearer {sg_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "from": {"email": from_email, "name": from_name},
+                "personalizations": [{
+                    "to": [{"email": to}],
+                    "dynamic_template_data": dynamic_data,
+                }],
+                "template_id": template_id,
+            },
+            timeout=15,
+        )
+        r.raise_for_status()
+        return True
+    except Exception as exc:
+        log.error("send_dynamic_template: failed to=%s template=%s — %s", to, template_id, exc)
+        return False
+
+
 def send_email(to: str, subject: str, body: str, from_addr: str = "hello@goodlie.golf") -> None:
     sg_key = os.environ.get("SENDGRID_API_KEY", "")
     if not sg_key:
