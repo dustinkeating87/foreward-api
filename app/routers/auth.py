@@ -1,9 +1,11 @@
 from fastapi import APIRouter, HTTPException, Depends
-from app.schemas import SignupRequest, LoginRequest
+from app.schemas import SignupRequest, LoginRequest, SignupFreeTierRequest
 from app.database import supabase, supabase_admin
 from app.dependencies import get_current_user
+from app.config import settings
 from datetime import datetime, timezone, timedelta
 from app.util.dates import _parse_iso
+from app.util.phone import hash_phone, is_valid_e164
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -37,6 +39,110 @@ def signup(body: SignupRequest):
         "user": {
             "id": str(response.user.id),
             "email": response.user.email,
+        },
+    }
+
+
+@router.post("/signup-free-tier", status_code=201)
+def signup_free_tier(body: SignupFreeTierRequest):
+    if not settings.free_tier_enabled:
+        raise HTTPException(status_code=503, detail="Free tier is not yet available.")
+
+    if not is_valid_e164(body.phone_e164):
+        raise HTTPException(status_code=422, detail="phone_e164 must be a valid E.164 phone number")
+
+    phone_hash = hash_phone(body.phone_e164)
+
+    # Validate verification token
+    row_result = (
+        supabase_admin.table("phone_verification_codes")
+        .select("id, used, token_expires_at, phone_hash")
+        .eq("verification_token", body.verification_token)
+        .maybe_single()
+        .execute()
+    )
+    row = row_result.data
+    if not row:
+        raise HTTPException(status_code=401, detail="Invalid or expired verification token")
+    if row.get("used"):
+        raise HTTPException(status_code=401, detail="Invalid or expired verification token")
+    # Python 3.9 compat: see app/util/dates.py
+    if datetime.now(timezone.utc) > _parse_iso(row["token_expires_at"]):
+        raise HTTPException(status_code=401, detail="Invalid or expired verification token")
+    if row["phone_hash"] != phone_hash:
+        raise HTTPException(status_code=401, detail="Invalid or expired verification token")
+
+    # Phone uniqueness: one free-tier account per phone number (lifetime)
+    existing = (
+        supabase_admin.table("user_profiles")
+        .select("id")
+        .eq("phone_hash", phone_hash)
+        .not_.is_("free_tier_used_at", "null")
+        .maybe_single()
+        .execute()
+    )
+    if existing.data:
+        raise HTTPException(status_code=409, detail="Phone number already associated with a free-tier account")
+
+    # Create auth user
+    try:
+        create_resp = supabase_admin.auth.admin.create_user({
+            "email": body.email,
+            "password": body.password,
+            "email_confirm": True,
+        })
+    except Exception as e:
+        err = str(e).lower()
+        if "already" in err or "exists" in err or "registered" in err:
+            raise HTTPException(status_code=409, detail="An account with this email already exists")
+        raise HTTPException(status_code=400, detail=str(e))
+
+    if not create_resp.user:
+        raise HTTPException(status_code=400, detail="Signup failed")
+
+    user_id = str(create_resp.user.id)
+
+    # Sign in to get JWT
+    try:
+        session_resp = supabase.auth.sign_in_with_password({
+            "email": body.email,
+            "password": body.password,
+        })
+    except Exception as e:
+        try:
+            supabase_admin.auth.admin.delete_user(user_id)
+        except Exception:
+            pass
+        raise HTTPException(status_code=400, detail=str(e))
+
+    # Compensating-action wrapper: profile update + mark token used
+    try:
+        now_iso = datetime.now(timezone.utc).isoformat()
+        supabase_admin.table("user_profiles").update({
+            "phone_verified": True,
+            "phone_hash": phone_hash,
+            "notify_phone": body.phone_e164,
+            "free_tier_used_at": now_iso,
+        }).eq("id", user_id).execute()
+
+        supabase_admin.table("phone_verification_codes").update({
+            "used": True,
+        }).eq("id", row["id"]).execute()
+    except Exception:
+        try:
+            supabase_admin.auth.admin.delete_user(user_id)
+        except Exception:
+            pass
+        raise HTTPException(status_code=500, detail="Account setup failed. Please try again.")
+
+    return {
+        "access_token": session_resp.session.access_token,
+        "refresh_token": session_resp.session.refresh_token,
+        "token_type": "bearer",
+        "user": {
+            "id": user_id,
+            "email": create_resp.user.email,
+            "tier": "free",
         },
     }
 

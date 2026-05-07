@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:3000"
     stripe_free_tier_coupon_id: str = ""
 
-    model_config = {"env_file": ".env"}
+    model_config = {"env_file": ".env", "extra": "ignore"}
 
 
 settings = Settings()

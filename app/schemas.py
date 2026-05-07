@@ -53,6 +53,13 @@ class AlertProfileUpdate(BaseModel):
         return self
 
 
+class SignupFreeTierRequest(BaseModel):
+    email: EmailStr
+    password: str
+    phone_e164: str
+    verification_token: str
+
+
 class CheckoutSessionRequest(BaseModel):
     # Optional: client can pass a customer email override; falls back to auth user email
     email: Optional[EmailStr] = None
