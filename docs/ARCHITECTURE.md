@@ -14,7 +14,7 @@ Raw scavenged data lives in `./scavenge-raw/` next to this file. Re-run scavenge
 
 **Positioning:** the ethical, golfer-friendly alternative to private auto-booking bots.
 
-**Pricing:** $9.99 CAD/mo, 7-day free trial.
+**Pricing:** Free-tier first. New users get one free alert on signup with no credit card; paywall presented after the alert fires. Paid tier: $9.99 CAD/month. There is no 7-day trial.
 **Domain:** https://goodlie.golf
 **Instagram:** @playgoodlie (active, secured Apr 25, 2026). @goodliegolf is squatted; reclaim attempt is parallel low-priority.
 
@@ -58,6 +58,61 @@ The product has been renamed twice. References in older code still use earlier n
 
 Backend changes do NOT belong in Lovable. Lovable holds only the frontend and one edge function (`course-request`) that submits course requests.
 
+
+---
+
+## Frontend style guide
+
+**As of 2026-05-08.** This supersedes any earlier brief or design-related instruction in older Lovable prompts, design docs, or memory. Lovable is the live source of truth for what's deployed; this section is the canonical written spec.
+
+### Color palette
+No grays. No pure black. No additional colors beyond these six.
+
+- `#FAF7F2` — bone (page background, ambient)
+- `#FFFFFF` — white (content section bands, header)
+- `#1A1816` — pencil (body text, headlines, secondary borders)
+- `#8A9485` — topo sage (mono labels, secondary text, faint line work; use at varying opacities where gray would normally go)
+- `#FF4A1F` — flag orange (single accent — primary CTA outline, mono numerals, surgical use only)
+- `#2D3B2A` — fairway green (DEPRECATED as button fill; reserved for future inverted sections only — do not use as button fill on new pages)
+
+### Typography
+- **Display:** Inter weight 900. Stack: `'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif`. Letter-spacing -0.02em on hero scale, -0.01em smaller. NOT Space Grotesk. NOT New York. NOT a serif.
+- **Body & UI:** Inter weights 400-600, same stack as display.
+- **Mono:** JetBrains Mono. Stack: `'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace`. Used for eyebrow labels, ticker data, mono numerals, all data-feeling content. Eyebrows uppercase with 0.08em letter-spacing.
+
+### Layout architecture
+- Page background is the topo illustration (ambient golf course line drawing) over `#FAF7F2` bone, with a 60% bone overlay for legibility.
+- Content sections sit on full-width white (`#FFFFFF`) bands.
+- Transparent vertical gaps between bands (96px desktop / 64px mobile) where the topo background shows through.
+- Hero section is transparent — sits directly on the topo composition, no white band.
+- Header is a white band at top of page. Footer (when built) is a white band.
+
+### Component patterns
+- **Primary button:** transparent fill, 1.5px `#FF4A1F` border, `#FF4A1F` text. Hover: fills with orange, text becomes `#FAF7F2`. Padding 14px vertical / 28px horizontal. 4px radius. Min-width 200px.
+- **Secondary button:** transparent fill, 1.5px `#1A1816` border, `#1A1816` text. Hover: fills with pencil, text becomes `#FAF7F2`. Same dimensions as primary.
+- **Buttons paired side-by-side:** 16px gap, both centered as a unit.
+- **Eyebrow labels:** mono, 11px, weight 500, color `#8A9485`, uppercase, 0.08em letter-spacing.
+- **Mono numerals (01, 02, 03):** mono, 11px, weight 500, color `#FF4A1F`, uppercase, 0.08em letter-spacing.
+
+### Spacing
+- 8px base unit. Use multiples (8, 16, 24, 32, 48, 64, 96, 128).
+- Section internal padding: 64px top/bottom desktop, 48px mobile (white bands).
+- Container max-width: 1280px.
+
+### Voice and copy
+- Informed, dry, confident. Player-side, not country-club.
+- Specific over generic, but don't burn in numbers that change ("every course we cover" not "22 courses").
+- No exclamation marks. No marketing superlatives. No "snipe" in user-facing copy — always "alert".
+- Numbers and data render in mono inline.
+- No "7-day free trial" language anywhere — that pricing model is retired.
+
+### Things explicitly out
+- No Space Grotesk anywhere.
+- No serif fonts (no New York, Georgia, etc.).
+- No grays — use `#8A9485` topo at varying opacities.
+- No pure black — use `#1A1816`.
+- No script fonts.
+- No gradients, no box shadows, no dark mode, no borders on content bands.
 
 ---
 
@@ -828,6 +883,14 @@ ClickUp is the live source of truth — this list is point-in-time.
 ---
 
 ## Decision log
+
+### 2026-05-08 (style guide + pricing model captured)
+
+Frontend style guide formalized in ARCHITECTURE.md as a new top-level section ("Frontend style guide"). Supersedes any earlier brief in Cowork memory or older Lovable prompts. Style is what's currently shipped on goodlie.golf and what Block 5c (free-tier signup page) is being built against. Key locked decisions: Inter weight 900 for display (NOT serif, NOT Space Grotesk), six-color palette with `#FF4A1F` flag orange as the single accent, transparent-fill orange-bordered primary buttons (NOT fairway-green-fill), no grays, no pure black, no gradients/shadows/dark-mode.
+
+Pricing model also corrected. The Product section previously said "$9.99 CAD/mo, 7-day free trial." That's wrong — there is no trial. Current model: free-tier first signup (one alert, no credit card), paywall after the alert fires. Paid tier remains $9.99 CAD/mo. Updated in the Product section above.
+
+Lesson: design state was drifting in Lovable while ARCHITECTURE.md still referenced the old brief. Caught when Block 5c prompt was being prepared and the assistant nearly pasted Lovable instructions referencing New York serif and fairway-green button fills. Style guide now lives under version control alongside schema and infrastructure — same drift protections apply.
 
 ### 2026-05-07 (Block 5a addendum — signup-free-tier `used` flag bug, FIXED)
 
