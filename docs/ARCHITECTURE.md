@@ -605,7 +605,7 @@ No staging environment. Auto-deploy on push (modulo "Wait for CI" if enabled). R
 | Failure | What happens | How it's detected | How it recovers |
 |---|---|---|---|
 | GolfNow Cloudflare/proxy block | GolfNow API returns errors or empty results for ALL courses (not short-circuit) | `consecutive_zero_polls.golfnow` increments on actual failure → **email at 10 polls**. (Distinct from intentional short-circuit where no alerts target GolfNow courses — that resets to 0 per `bc527e3`.) | Webshare proxy rotation / wait it out / contact GolfNow if persistent |
-| 2Captcha balance exhausted | GTG captcha solves fail; GTG returns 0 slots | Same signature: streak increments → **email at 10 polls**. (Direct balance check is queued, ClickUp `86ah8bq89`) | Top up account |
+| 2Captcha balance exhausted | GTG captcha solves fail; GTG returns 0 slots | **Direct balance polling from API service every 15 min; alarm email at `CAPTCHA_BALANCE_ALARM_THRESHOLD_USD` (default $5.00); recovery email on top-up.** Zero-slot streak still fires independently. (Closed ClickUp `86ah8bq89`) | Top up at https://2captcha.com/pay |
 | GTG account banned/throttled | GTG scrape fails or returns empty | Same signature as captcha failure | Rotate to backup account |
 | Worker crashes | Polling stops entirely | Heartbeat goes stale (no auto-detect; planned: `86ah8bq8w`) | Railway auto-restart per `railway.json` |
 | Worker stuck-but-running | Process alive, polls don't complete | Currently undetected. Will be caught by planned `/healthz` endpoint (`86ah8bq8w`) | Manual restart until healthcheck ships |
@@ -785,6 +785,7 @@ Admin
 - Service: `web` (id `0aa1761e-7bd3-4d72-9877-0968a14f5974`)
 - Public URL: `https://web-production-b24db.up.railway.app`
 - 24 service env vars (added 2026-05-03: `ALARM_THRESHOLD_POLLS=10`, `ALARM_EMAIL_TO=hello@goodlie.golf`, `ALARM_EMAIL_FROM=hello@goodlie.golf`; added 2026-05-07: `SENDGRID_TEMPLATE_FREE_TIER_EXPIRY_1`, `SENDGRID_TEMPLATE_FREE_TIER_EXPIRY_2`, `SENDGRID_TEMPLATE_FREE_TIER_EXPIRY_3`)
+- **Pending manual step (2026-05-08):** Add `CAPTCHA_API_KEY` to Railway `web` service env — same value as on the worker. Required for 2Captcha balance auto-alert (`app/captcha_balance.py`). Until added, balance checks will silently skip (logged as warning). Optional: `CAPTCHA_BALANCE_ALARM_THRESHOLD_USD=5.0` to override default.
 
 ### Supabase
 - Project ID: `offtdltmvjfizkoeywei`
@@ -845,7 +846,7 @@ Admin
 6. ~~No worker healthcheck endpoint — Railway can't auto-detect stuck-but-running worker~~ ✓ closed 2026-05-08 — `/healthz` shipped in foreward-scraper commit `b2ea3ad`. Railway healthcheck wired in `railway.json`. See decision log entry 2026-05-08 (evening).
 7. **`GTG_ACCOUNT` (singular) on worker vs `GTG_ACCOUNTS` (plural) on API** — multi-account migration half-done.
 8. ~~README in `foreward-api` still says "Tee Sniper API"~~ ✓ closed 2026-05-08 — verified rebranded in commit `a6a9730`
-9. **2Captcha balance has no auto-monitoring** — silent failure mode if balance hits zero. Spec ready (ClickUp `86ah8bq89`). Current balance $18.72 (~18 days).
+9. ~~2Captcha balance has no auto-monitoring — silent failure mode if balance hits zero~~ ✓ closed 2026-05-08 — `app/captcha_balance.py` polls balance directly from API service every 15 min, fires alarm/recovery email on threshold transitions. Alarm at `CAPTCHA_BALANCE_ALARM_THRESHOLD_USD` (default $5.00). Requires `CAPTCHA_API_KEY` on Railway `web` service env (see decision log 2026-05-08 /healthz evening).
 10. **Meta ad account trust issues** affecting parent operator's brands.
 11. **Scraper writes status via API endpoints, not direct Supabase.** If alerts get stuck in `active` despite firing, check API logs first.
 12. **61 orphan rows in `sent_slots`** (`user_id IS NULL`) from pre-launch test alerts. Harmless. Optional cleanup deferred.
@@ -923,6 +924,10 @@ ClickUp is the live source of truth — this list is point-in-time.
 ---
 
 ## Decision log
+
+### 2026-05-08 (2Captcha balance auto-alert shipped)
+
+`app/captcha_balance.py` added to foreward-api. `check_captcha_balance()` hits `2captcha.com/res.php?action=getbalance` directly from the API service. `maybe_check_and_alert(supabase)` is called on every `/scraper-heartbeat` but internally rate-limits to once per 15 min (`CAPTCHA_BALANCE_CHECK_INTERVAL_MINUTES`, default 15). Alarm state is persisted in three new `scraper_health` columns: `captcha_balance_alarmed` (boolean), `last_captcha_balance_check_at` (timestamptz), `last_captcha_balance_usd` (numeric 10,4). Alarm email fires on `False → True` transition; recovery email on `True → False`. First check after migration (`NULL` prev state) sets state without emailing. 2Captcha API error preserves existing state and sends no email. 9 tests added. Migration file: `20260508_add_captcha_balance_alarm_state.sql` — apply manually via Supabase SQL Editor. `CAPTCHA_API_KEY` must be added to Railway `web` service env (currently only on worker). Threshold default lowered from 10.0 (`CAPTCHA_BALANCE_THRESHOLD` in old admin.py constant) to 5.0 (`CAPTCHA_BALANCE_ALARM_THRESHOLD_USD`). Replaces the scraper-reported transition check that was previously in `/scraper-heartbeat` handler — that check was stateless across API restarts and fired only hourly (scraper's balance refresh rate). Closes ClickUp `86ah8bq89` and known issue #9.
 
 ### 2026-05-08 (/healthz worker liveness endpoint shipped)
 

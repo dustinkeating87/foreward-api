@@ -2,7 +2,8 @@ from fastapi import APIRouter, HTTPException, Request, Depends
 from app.database import supabase_admin
 from app.dependencies import get_current_user
 from app.config import settings
-from app.email import send_email, send_balance_alarm_email, send_balance_recovery_email
+from app.email import send_email
+from app.captcha_balance import maybe_check_and_alert
 from app.util.dates import _parse_iso
 from collections import Counter
 from datetime import datetime, timezone, timedelta
@@ -16,8 +17,6 @@ log = logging.getLogger(__name__)
 ADMIN_EMAILS = ["dustinkeating87@gmail.com"]
 ALERTING_PLATFORMS = ["gtg", "golfnow", "chronogolf"]
 ZERO_STREAK_THRESHOLD = 10
-CAPTCHA_BALANCE_THRESHOLD = float(os.environ.get("CAPTCHA_BALANCE_THRESHOLD", "10.0"))
-
 PLATFORM_GUIDANCE = {
     "lakeview": "The Lakeview cookie has likely expired. Log in to the scraper dashboard and refresh the session cookie.",
     "gtg": "Check 2captcha balance and account health. Low credits or a banned account will cause silent failures.",
@@ -68,7 +67,6 @@ async def scraper_heartbeat(request: Request):
     prev_result = supabase_admin.table("scraper_health").select("*").eq("id", 1).maybe_single().execute()
     prev_data = prev_result.data or {}
     prev_streaks: dict = prev_data.get("consecutive_zero_polls") or {}
-    prev_captcha_balance = prev_data.get("captcha_balance")
 
     upsert_data = {
         "id": 1,
@@ -125,19 +123,10 @@ async def scraper_heartbeat(request: Request):
         except Exception as exc:
             log.error("heartbeat email failed for platform=%s: %s", platform, exc)
 
-    new_captcha_balance = body.get("captcha_balance")
-    if new_captcha_balance is not None:
-        try:
-            new_bal = float(new_captcha_balance)
-            prev_bal = float(prev_captcha_balance) if prev_captcha_balance is not None else None
-            if prev_bal is not None and prev_bal >= CAPTCHA_BALANCE_THRESHOLD and new_bal < CAPTCHA_BALANCE_THRESHOLD:
-                send_balance_alarm_email(new_bal, CAPTCHA_BALANCE_THRESHOLD)
-                log.info("captcha balance alarm sent: %.2f < threshold %.2f", new_bal, CAPTCHA_BALANCE_THRESHOLD)
-            elif prev_bal is not None and prev_bal < CAPTCHA_BALANCE_THRESHOLD and new_bal >= CAPTCHA_BALANCE_THRESHOLD:
-                send_balance_recovery_email(new_bal, CAPTCHA_BALANCE_THRESHOLD)
-                log.info("captcha balance recovery sent: %.2f >= threshold %.2f", new_bal, CAPTCHA_BALANCE_THRESHOLD)
-        except Exception as exc:
-            log.error("captcha balance email failed: %s", exc)
+    try:
+        await maybe_check_and_alert(supabase_admin)
+    except Exception as exc:
+        log.error("maybe_check_and_alert raised unexpectedly: %s", exc)
 
     return {"ok": True}
 
