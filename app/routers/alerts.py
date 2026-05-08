@@ -19,6 +19,11 @@ def _is_paid(profile: dict) -> bool:
     return bool(profile.get("is_active") or profile.get("is_beta"))
 
 
+def is_user_free_tier(profile: dict) -> bool:
+    """True for active free-tier users and lapsed paid users who later used free tier."""
+    return bool(profile.get("free_tier_used_at") and not profile.get("is_active"))
+
+
 def _require_subscription_or_free_tier(profile: dict) -> None:
     """When FREE_TIER_ENABLED=false, replicates get_current_subscribed_user's gate.
     When the flag is on, passes through — the handler does its own branching."""
@@ -63,6 +68,9 @@ def create_alert(body: AlertProfileCreate, ctx=Depends(get_current_user_with_pro
         return result.data[0]
 
     # Unpaid path
+    if is_user_free_tier(profile) and not settings.free_tier_enabled:
+        raise HTTPException(status_code=503, detail="Free tier is not yet available.")
+
     if not settings.free_tier_enabled:
         raise HTTPException(status_code=403, detail="Active subscription required")
 
@@ -70,8 +78,16 @@ def create_alert(body: AlertProfileCreate, ctx=Depends(get_current_user_with_pro
         # Phone permanently ineligible for free tier
         raise HTTPException(status_code=402, detail="Payment required to create alerts")
 
-    if profile.get("free_tier_used_at"):
-        # Already consumed their one free alert
+    concurrent = (
+        supabase_admin.table("alert_profiles")
+        .select("id", count="exact")
+        .eq("user_id", user_id)
+        .eq("is_free_tier", True)
+        .in_("status", ["active", "fired"])
+        .neq("expiry_state", "final_expired")
+        .execute()
+    )
+    if (concurrent.count or 0) >= 1:
         raise HTTPException(status_code=402, detail="Payment required to create additional alerts")
 
     # Free-tier requires exactly one course

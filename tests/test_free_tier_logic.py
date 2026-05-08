@@ -160,3 +160,67 @@ def test_expiry_5_digit_microsecond_timestamp():
     alert = {"is_free_tier": True, "status": "active", "expiry_state": None,
              "polling_expires_at": past, "renewals_used": 0}
     assert _classify_expiry_action(alert, now) == "pending_renewal"
+
+
+# ── is_user_free_tier ──────────────────────────────────────────────────────────
+
+def is_user_free_tier(profile: dict) -> bool:
+    return bool(profile.get("free_tier_used_at") and not profile.get("is_active"))
+
+
+def test_is_user_free_tier_true_for_free_tier_user():
+    profile = {"free_tier_used_at": "2026-05-01T00:00:00+00:00", "is_active": False}
+    assert is_user_free_tier(profile) is True
+
+
+def test_is_user_free_tier_false_for_paid_user():
+    assert is_user_free_tier({"is_active": True, "free_tier_used_at": "2026-05-01T00:00:00+00:00"}) is False
+
+
+def test_is_user_free_tier_false_for_new_user():
+    assert is_user_free_tier({}) is False
+
+
+def test_is_user_free_tier_false_for_lapsed_paid_no_free_tier_history():
+    # Lapsed paid, never used free tier — free_tier_used_at is NULL
+    assert is_user_free_tier({"is_active": False}) is False
+
+
+def test_is_user_free_tier_true_lapsed_paid_with_free_tier_history():
+    # Was paid, subscription lapsed, previously had free-tier alert
+    profile = {"free_tier_used_at": "2026-04-01T00:00:00+00:00", "is_active": False, "is_beta": False}
+    assert is_user_free_tier(profile) is True
+
+
+def _classify_concurrent_cap(alerts: list) -> bool:
+    """Returns True (blocked) if there is at least one active/fired non-final-expired free-tier alert."""
+    for a in alerts:
+        if a.get("is_free_tier") and a.get("status") in ("active", "fired") and a.get("expiry_state") != "final_expired":
+            return True
+    return False
+
+
+def test_concurrent_cap_blocks_on_active_alert():
+    alerts = [{"is_free_tier": True, "status": "active", "expiry_state": None}]
+    assert _classify_concurrent_cap(alerts) is True
+
+
+def test_concurrent_cap_blocks_on_fired_alert():
+    alerts = [{"is_free_tier": True, "status": "fired", "expiry_state": None}]
+    assert _classify_concurrent_cap(alerts) is True
+
+
+def test_concurrent_cap_allows_after_final_expired():
+    # final_expired alert should NOT count against the cap
+    alerts = [{"is_free_tier": True, "status": "active", "expiry_state": "final_expired"}]
+    assert _classify_concurrent_cap(alerts) is False
+
+
+def test_concurrent_cap_allows_when_no_free_tier_alerts():
+    alerts = []
+    assert _classify_concurrent_cap(alerts) is False
+
+
+def test_concurrent_cap_allows_paid_alert_not_counted():
+    alerts = [{"is_free_tier": False, "status": "active", "expiry_state": None}]
+    assert _classify_concurrent_cap(alerts) is False
