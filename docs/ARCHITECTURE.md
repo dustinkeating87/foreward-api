@@ -116,6 +116,40 @@ No grays. No pure black. No additional colors beyond these six.
 
 ---
 
+## Frontend signup flow
+
+**As of 2026-05-08.** The free-tier signup page lives at `/auth?mode=signup` on Lovable's `foreward` repo. It REPLACES the previous paid signup flow at the same URL (which redirected to Stripe Checkout). Per the locked pricing model, all new users now enter the product through free-tier signup; paid upgrade happens later, from the dashboard, after a user's free alert fires.
+
+### Layout
+Vertical band stack: four full-width white (`#FFFFFF`) horizontal bands stacked vertically, separated by transparent gaps where the topo illustration page background shows through. Bands share equal `min-height` for visual rhythm.
+
+- **Band 1 (Hero):** "Try one alert, free for 14 days" / "No credit card. One alert per phone number."
+- **Band 2 (Step 01):** Phone verification — mobile number + OTP send/verify
+- **Band 3 (Step 02):** Account creation — email + password — RENDERED ONLY AFTER phone verification succeeds (not display:none, not rendered at all in the DOM until verify-phone returns 200)
+- **Band 4 (Footer):** "Already have an account? Sign in" + fine-print pricing line ("Paid plan ($9.99/mo) unlocks unlimited alerts after your first one fires.")
+
+### Page background
+The topo illustration is a page-wide persistent background, NOT confined to band gaps. A 60% opacity bone (`#FAF7F2`) overlay sits on top of the topo for legibility. White content bands occlude the topo where they render; transparent gaps between bands reveal it.
+
+### Form behavior
+Step 02 inputs and submit are not rendered until phone verification succeeds. After successful `POST /auth/verify-phone`, Band 3 mounts into the DOM between Band 2 and Band 4, and the page smooth-scrolls down to it.
+
+### API endpoints consumed
+- `POST /auth/send-verification-code`
+- `POST /auth/verify-phone`
+- `POST /auth/resend-verification-code`
+- `POST /auth/signup-free-tier`
+
+All four endpoints are gated behind `FREE_TIER_ENABLED` env var on Railway. As of 2026-05-08, `FREE_TIER_ENABLED=false` — meaning the signup page renders but form submissions return 503 with "not available yet" copy. Flag flips at Block 9 cutover.
+
+### Localstorage tokens
+Successful signup writes `access_token` and `refresh_token` to localStorage using the same keys as the existing sign-in flow at `/auth?mode=signin`.
+
+### Deferred verification
+Block 5b's full gate ladder (503 → 403 → 402 → 402 → 200 on `POST /alerts`) and the full signup loop end-to-end are NOT prod-verified as of 2026-05-08. Verification deferred to real-user walkthrough on a fresh phone (the burnt phone `+16475155754` is not usable). Pre-launch checklist (ClickUp `86ahbkx68`, `86ahbfptb`) tracks this requirement before flipping `FREE_TIER_ENABLED=true`.
+
+---
+
 ## Database schema (Supabase project `offtdltmvjfizkoeywei`)
 
 Six tables, all with RLS enabled. Verified live 2026-05-03 (afternoon).
@@ -477,7 +511,9 @@ On each heartbeat:
 | Route | Purpose |
 |---|---|
 | `/` | Landing — pitch, pricing, "Never miss a tee time" tagline. Activity ticker. Region-group pill listing 13 GTA courses |
-| `/signup`, `/login` | Auth flows |
+| `/auth?mode=signup` | Free-tier signup flow (phone verification → account creation). Rebuilt 2026-05-08, replaces the previous paid Stripe-redirect flow at this same URL. |
+| `/auth?mode=signin` | Sign-in flow. Untouched as of 2026-05-08. |
+| `/signup` | Orphaned route from a 2026-05-08 Lovable iteration. Currently redirecting / no-op. Cleanup deferred — does not block launch. |
 | `/dashboard` | `status='active'` alerts only (filter via `?status=active`) |
 | `/alerts/new`, `/alerts/{id}/edit` | Alert criteria CRUD |
 | `/alerts/history` | `status='fired'` and `status='expired'` alerts; status badges; "Try again" / "Edit dates" buttons |
@@ -807,7 +843,7 @@ Admin
 5. ~~No Supabase backups configured~~ ✓ closed 2026-05-03 afternoon (weekly local pg_dump → Google Drive).
 6. **No worker healthcheck endpoint** — Railway can't auto-detect stuck-but-running worker. Spec ready (ClickUp `86ah8bq8w`).
 7. **`GTG_ACCOUNT` (singular) on worker vs `GTG_ACCOUNTS` (plural) on API** — multi-account migration half-done.
-8. ~~README in `foreward-api` still says "Tee Sniper API"~~ ✓ closed 2026-05-08. README was already updated; tracking entry retroactively closed.
+8. ~~README in `foreward-api` still says "Tee Sniper API"~~ ✓ closed 2026-05-08 — verified rebranded in commit `a6a9730`
 9. **2Captcha balance has no auto-monitoring** — silent failure mode if balance hits zero. Spec ready (ClickUp `86ah8bq89`). Current balance $18.72 (~18 days).
 10. **Meta ad account trust issues** affecting parent operator's brands.
 11. **Scraper writes status via API endpoints, not direct Supabase.** If alerts get stuck in `active` despite firing, check API logs first.
@@ -824,13 +860,15 @@ Admin
 
 19. ~~Possible vestigial Lakeview code in `tee_sniper.py`~~ ✓ closed 2026-05-08 — audit confirmed the "vestigial Lakeview code" was actually the retired EZLinks platform scraper (`ezlinks_scraper.py`); deleted in commit `1bad5cf` (foreward-scraper). It was never a Lakeview-specific scraper — it was the whole EZLinks platform module which happened to configure Lakeview as one of its courses. The original "inline Lakeview scraper" framing in the doc was misleading. Lakeview is actively and correctly served by `golfnow_scraper.py`.
 
-21. ~~Local Python 3.9.6 vs Railway Python 3.11 — `fromisoformat` drift~~ ✓ closed 2026-05-08 (ClickUp `86ahbacxw`). `_parse_iso()` centralized in `app/util/dates.py`; all three out-of-scope call sites (`heartbeat_monitor.py`, `routers/auth.py`, `routers/admin.py`) confirmed patched. 67/67 tests pass on Python 3.9.6.
+21. ~~Local Python 3.9.6 vs Railway Python 3.11 — `fromisoformat` drift~~ ✓ closed 2026-05-08 — extracted to `app/util/dates.py` (NOT `datetime_compat.py` as originally proposed); all four call sites now import `_parse_iso`. Commit `582743b`.
 
 22. **Supabase SQL editor shows "0 rows" for UPDATE without RETURNING.** The editor reports "0 rows" for any DML statement that doesn't include a `RETURNING` clause, regardless of how many rows were actually affected. Always append `RETURNING id` (or similar) when row count matters during a test or migration verify.
 
 23. **Free-tier first_name fallback is hardcoded to "there"** in expiry email templates. `user_profiles` has no first_name column. Acceptable for launch since most users won't notice "Hey there," in a transactional email. Worth fixing once free-tier flows have real user data.
 
 24. **`COURSE_DISPLAY_NAMES` dict in `app/util/courses.py` is hardcoded** and won't reflect upstream renames automatically. Scraper fetches canonical names from external APIs at runtime (`sent_slots.course_name`); the dict is for email/SMS copy where no `sent_slots` row exists yet. Reconcile against scraper's runtime names ~quarterly.
+
+25. **Block 5b prod-side AC verification deferred.** The new free-tier alert creation gate ladder (503 → 403 → 402 → 402 → 200 on `POST /alerts`, gated by `FREE_TIER_ENABLED`) is shipped (commits `a2b519a`, `6d4d9bd`) and unit-tested but not prod-verified end-to-end. Same pattern as Block 3 verification: requires real signup with a fresh phone number. Pre-launch checklist tickets (ClickUp `86ahbkx68`, `86ahbfptb`) track this. Block 9 cutover (flag flip) MUST NOT happen until this verification passes. Plan: walk a real user through full signup → verify-phone → POST /alerts loop on a fresh phone, work backwards from the failure point if anything breaks.
 
 ---
 
@@ -884,6 +922,29 @@ ClickUp is the live source of truth — this list is point-in-time.
 ---
 
 ## Decision log
+
+### 2026-05-08 (evening session — Block 5b ship + Lovable signup rebuild + cleanup)
+
+Frontend free-tier signup flow shipped on `/auth?mode=signup`. Rebuilt from scratch over a single Lovable session: vertical band stack (4 bands), persistent topo page background with 60% bone overlay, center-aligned spine, equal `min-height` bands, orange step numerals as visual accent. Replaces the previous paid Stripe-redirect signup at the same URL — per pricing model A, there is no longer a paid signup path at site entry; paid upgrades happen post-fire from the dashboard. Style guide section above documents the locked design tokens. New "Frontend signup flow" section captures the page structure. The orphaned `/signup` route from an earlier Lovable iteration is currently redirecting/no-op; cleanup deferred (does not block launch).
+
+Block 5b shipped backend-side (commits `a2b519a` for the gate ladder + `is_user_free_tier()` classifier, `6d4d9bd` for the doc). 31 tests passing locally. Prod-side AC verification deliberately deferred to a real-user walkthrough on a fresh phone (added as known issue #25). Same deferred-verification pattern as Block 3.
+
+Cleanup work shipped:
+- README rebranded (commit `a6a9730`) — closes known issue #8
+- `_parse_iso()` extracted to `app/util/dates.py`, all four call sites import the helper (commit `582743b`) — closes known issue #21
+- `ezlinks_scraper.py` deleted (foreward-scraper commit `1bad5cf`, foreward-api doc commit `0adc06f`) — closes known issue #19. The "vestigial Lakeview code" framing in the original issue was misleading; the file was the retired EZLinks platform scraper that happened to scrape Lakeview, not Lakeview-specific code.
+
+Architecture doc gap from 2026-05-04 → 2026-05-06 acknowledged but not back-filled (separate decision log entry above explains).
+
+Open at session end:
+- Block 5c (Lovable signup) shipped tonight — sits behind the `FREE_TIER_ENABLED=false` flag with the rest of the free-tier path
+- Block 5b prod verification — known issue #25
+- Block 4b (Stripe coupons + email integration) still pending, low priority, can land any time
+
+Lessons:
+1. Trust nothing about commit state at session start without `git log --oneline -5 origin/main`. Tonight's handoff said tip was `6d952c5` and Block 5b not shipped — both stale. Block 5b had already shipped (`6d4d9bd`).
+2. Lovable's "Done" summary is not the same as "deployed to production." Always Publish + hard-refresh `goodlie.golf` before assuming changes are live.
+3. State drift between style guides is a real failure mode. The original ARCHITECTURE.md style spec was outdated by ~5 days when this session started; the active May 8 style guide had to be pasted in mid-session. Style guide now lives under version control alongside schema and infrastructure.
 
 ### 2026-05-08 (style guide + pricing model captured)
 
