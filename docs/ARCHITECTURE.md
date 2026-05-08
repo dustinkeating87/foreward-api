@@ -907,12 +907,29 @@ AC verification (all PASS as of 2026-05-08):
 
 Diagnostic-logging detour: commit e4a8a93 added temporary logging during the 401 investigation; reverted in c4ea790 once the dual-semantics root cause was identified. Captured here so the e4a8a93→c4ea790 commit pair has documented intent.
 
-Block 5b (free-tier alert creation, modifies POST /alerts) and Block 5c (Lovable signup prompt skeleton) plan docs exist at docs/superpowers/plans/2026-05-07-block-5b-*.md and 2026-05-07-block-5c-*.md. Pending separate sessions.
+Block 5b (free-tier alert creation, modifies POST /alerts) shipped 2026-05-08. Block 5c (Lovable signup prompt skeleton) plan doc at docs/superpowers/plans/2026-05-07-block-5c-*.md. Pending separate session.
 
 Cleanup deferred:
 - The freetier1 test user (UID 87ba8c28-db02-4cd6-8641-6be29dd41f30) and its phone_verification_codes row (id ed812333) should be deleted before launch to free up the +16475155754 phone for real use. Tracked alongside the existing Block 3 cleanup item for dustinkeating87+test@gmail.com.
 
 Bug 86ahbkw2n ("2 renewals remaining" copy mismatch from Block 3 verification) remains open and is now expected to be addressed as part of Block 4b or wherever the user-facing free-tier email copy gets revisited.
+
+### 2026-05-08 (Block 5b — free-tier alert creation logic, SHIPPED)
+
+Concurrent alert cap replaces lifetime `free_tier_used_at` block in `POST /alerts`. Added `is_user_free_tier()` classifier (True when `free_tier_used_at IS NOT NULL AND NOT is_active`). Commit: a2b519a.
+
+Key changes to `app/routers/alerts.py`:
+- `is_user_free_tier(profile)` added alongside `_is_paid()`.
+- Defense-in-depth 503 (not 403) for existing free-tier users when `FREE_TIER_ENABLED=false`.
+- Old `if free_tier_used_at:` → 402 block removed. Replaced with a live DB count of `is_free_tier=true` alerts with `status IN ('active','fired') AND expiry_state != 'final_expired'`; count ≥ 1 → 402.
+- `final_expired_at` user-level permanent block preserved at position 4 in gate order.
+- Paid path: zero change.
+
+Gate order (unpaid branch): is_user_free_tier+flag_off→503 → flag_off→403 → final_expired_at→402 → concurrent cap≥1→402 → free-tier creation.
+
+10 new unit tests in `tests/test_free_tier_logic.py` (31 total, all passing). Compile clean. Plan doc: `docs/superpowers/plans/2026-05-07-block-5b-free-tier-alert-creation.md`.
+
+No DB migration — all columns (`is_free_tier`, `expiry_state`, `renewals_used`, `polling_expires_at`) were added in Block 1.
 
 ### 2026-05-07 (Block 3 — free-tier alert lifecycle, VERIFIED)
 
