@@ -348,7 +348,7 @@ foreward-api/
 ├── supabase/
 │   └── migrations/             ← active 2026-05-03; 2 files committed
 ├── Procfile
-├── README.md                   ← branding fix queued (Tee Sniper → Good Lie)
+├── README.md
 ├── railway.json
 ├── requirements.txt
 └── runtime.txt
@@ -806,7 +806,7 @@ Admin
 5. ~~No Supabase backups configured~~ ✓ closed 2026-05-03 afternoon (weekly local pg_dump → Google Drive).
 6. **No worker healthcheck endpoint** — Railway can't auto-detect stuck-but-running worker. Spec ready (ClickUp `86ah8bq8w`).
 7. **`GTG_ACCOUNT` (singular) on worker vs `GTG_ACCOUNTS` (plural) on API** — multi-account migration half-done.
-8. **README in `foreward-api` still says "Tee Sniper API"** — branding fix queued (sed command in session notes).
+8. ~~README in `foreward-api` still says "Tee Sniper API"~~ ✓ closed 2026-05-08. README was already updated; tracking entry retroactively closed.
 9. **2Captcha balance has no auto-monitoring** — silent failure mode if balance hits zero. Spec ready (ClickUp `86ah8bq89`). Current balance $18.72 (~18 days).
 10. **Meta ad account trust issues** affecting parent operator's brands.
 11. **Scraper writes status via API endpoints, not direct Supabase.** If alerts get stuck in `active` despite firing, check API logs first.
