@@ -794,6 +794,7 @@ Admin
 | **Backup retention 28 days** | **2026-05-03** | **Sufficient given quarterly test cadence; minimizes Drive bloat.** |
 | **Silent-failure alerts: API-side, transition-only** | **2026-05-03** | **No state column needed. Implicit comparison of prev/new. Failures swallowed — never break heartbeat.** |
 | **DB password is alphanumeric only** | **2026-05-03** | **Avoids URL-encoding issues across shells, scripts, and connection-string parsers.** |
+| "By request" picker pattern for non-GTA courses | 2026-05-05 | Founder-curated course additions surface in the alert picker's "By request" section only — not on the homepage. Homepage stays GTA-only. Pattern: founder-curated courses graduate to a proper named region at ~5-8 courses. First applied to Sandridge GC (Vero Beach FL, GolfNow platform) — Dunes facility 5223, Lakes facility 6798. |
 
 ---
 
@@ -993,6 +994,12 @@ Gate order (unpaid branch): is_user_free_tier+flag_off→503 → flag_off→403 
 10 new unit tests in `tests/test_free_tier_logic.py` (31 total, all passing). Compile clean. Plan doc: `docs/superpowers/plans/2026-05-07-block-5b-free-tier-alert-creation.md`.
 
 No DB migration — all columns (`is_free_tier`, `expiry_state`, `renewals_used`, `polling_expires_at`) were added in Block 1.
+
+### 2026-05-08 (architecture doc gap acknowledged)
+
+ARCHITECTURE.md was lost from local filesystem on 2026-05-06 and recovered from a 2026-05-03 baseline. Updates between 2026-05-03 PM and 2026-05-06 morning (2Captcha balance auto-alert wiring, ClickUp/doc reconciliation work, by-request picker confirmation, alert form defaults patches) were never re-derived back into the doc. ClickUp 86ahb0m91 tracked the recovery work.
+
+Decision: NOT back-filling. The work shipped, the current state is observable in production, and re-deriving 60 hours of history from git + ClickUp doesn't pay for itself. The by-request picker pattern (the only piece that's a reusable decision template rather than a one-off event) is now captured in the locked-in decisions table above. Other items in that window are either already-tracked tickets (2Captcha balance auto-alert is open as 86ah8bq89) or one-time fixes whose current state is the production state. Going forward, the end-of-block ARCHITECTURE.md update rule prevents the same gap.
 
 ### 2026-05-07 (Block 3 — free-tier alert lifecycle, VERIFIED)
 
