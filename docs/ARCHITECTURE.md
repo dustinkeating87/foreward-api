@@ -1,6 +1,6 @@
 # Good Lie Golf — Architecture & Decision Log
 
-**Last verified:** 2026-05-07 (Block 4a: SendGrid Dynamic Templates for free-tier expiry emails)
+**Last verified:** 2026-05-08 (late evening — reliability sprint: /healthz, 2Captcha balance auto-alert, Lovable batch)
 **Maintained by:** Claude sessions, in collaboration with Dustin
 **Read this file at the start of any Good Lie Golf work.** It is the source of truth for how the app is built. ClickUp space `Good Lie Golf` (id `901313780791`) is the source of truth for *open work*. Both must be checked. If you make architectural decisions or learn schema details during a session, update this file before ending the session.
 
@@ -333,6 +333,7 @@ Committed migrations:
 - `20260506_add_heartbeat_alarm_state.sql`
 - `20260506_add_free_tier_columns.sql` — commit TBD (this session)
 - `20260506_add_phone_verification_codes.sql` — Block 2; committed, not yet applied to prod (Dustin applies via SQL Editor)
+- `20260508_add_captcha_balance_alarm_state.sql` — applied 2026-05-08, commit `29f0e3a` (3 new columns on `scraper_health` for 2Captcha balance auto-alert)
 
 `supabase_migrations.schema_migrations` table still does not exist; using the directory as the registry rather than the Supabase CLI's tracking system. Acceptable for this scale.
 
@@ -598,17 +599,17 @@ No staging environment. Auto-deploy on push (modulo "Wait for CI" if enabled). R
 | CI status | GitHub Actions tab on each repo | per-push |
 | Backup status | `cat ~/.goodlie-backup-status` on local Mac | weekly |
 
-**No automated paging beyond email.** Email-on-silent-failure is the only auto-alert. Worker healthcheck endpoint planned (ClickUp `86ah8bq8w`).
+**No automated paging beyond email.** Email-on-silent-failure is the only auto-alert. Worker `/healthz` healthcheck endpoint shipped 2026-05-08 (closes ClickUp `86ah8bq8w`).
 
 ### Failure modes (umbrella view)
 
 | Failure | What happens | How it's detected | How it recovers |
 |---|---|---|---|
 | GolfNow Cloudflare/proxy block | GolfNow API returns errors or empty results for ALL courses (not short-circuit) | `consecutive_zero_polls.golfnow` increments on actual failure → **email at 10 polls**. (Distinct from intentional short-circuit where no alerts target GolfNow courses — that resets to 0 per `bc527e3`.) | Webshare proxy rotation / wait it out / contact GolfNow if persistent |
-| 2Captcha balance exhausted | GTG captcha solves fail; GTG returns 0 slots | **Direct balance polling from API service every 15 min; alarm email at `CAPTCHA_BALANCE_ALARM_THRESHOLD_USD` (default $5.00); recovery email on top-up.** Zero-slot streak still fires independently. (Closed ClickUp `86ah8bq89`) | Top up at https://2captcha.com/pay |
+| 2Captcha balance exhausted | GTG captcha solves fail; GTG returns 0 slots | Direct balance polling every 15 min via `/scraper-heartbeat`. Alarm at <$5 USD. Email via existing alarm infra. Closes ClickUp `86ah8bq89`. Zero-slot streak still fires independently. | Top up at https://2captcha.com/pay |
 | GTG account banned/throttled | GTG scrape fails or returns empty | Same signature as captcha failure | Rotate to backup account |
 | Worker crashes | Polling stops entirely | Heartbeat goes stale (no auto-detect; planned: `86ah8bq8w`) | Railway auto-restart per `railway.json` |
-| Worker stuck-but-running | Process alive, polls don't complete | Currently undetected. Will be caught by planned `/healthz` endpoint (`86ah8bq8w`) | Manual restart until healthcheck ships |
+| Worker stuck-but-running | Process alive, polls don't complete | `/healthz` endpoint on worker returns 503 if last poll completed >180s ago. Railway healthcheck triggers restart on failure. Shipped 2026-05-08. | Railway auto-restart via healthcheck |
 | API service down | Frontend errors AND scraper status writes fail | User-visible 5xx; scraper logs API errors | Railway auto-restart |
 | API down during a fire | Alert fires SMS, but `/scraper/fire-alert` fails → status stays 'active' → re-fire next poll on dedupe miss | Look for repeated SMS to same user | Manual SQL UPDATE if it happens |
 | Stripe webhook drops | Subscription state in `user_profiles` drifts from Stripe | Manual reconciliation only | Stripe auto-retries for ~3 days |
@@ -757,6 +758,9 @@ Admin
   POST   /scraper-heartbeat          ← worker → API health ping; ALSO checks alarm thresholds and emails on transitions
   GET    /admin/scraper-health
   GET    /admin/dashboard
+
+Worker (foreward-scraper)
+  GET    /healthz                    ← HTTP healthcheck on aiohttp server; reads in-process timestamp; returns starting/healthy/stale
 ```
 
 ---
@@ -784,8 +788,7 @@ Admin
 - Project ID: `7c8fa4ed-d992-4f5d-a78b-907ed5fd4e44`
 - Service: `web` (id `0aa1761e-7bd3-4d72-9877-0968a14f5974`)
 - Public URL: `https://web-production-b24db.up.railway.app`
-- 24 service env vars (added 2026-05-03: `ALARM_THRESHOLD_POLLS=10`, `ALARM_EMAIL_TO=hello@goodlie.golf`, `ALARM_EMAIL_FROM=hello@goodlie.golf`; added 2026-05-07: `SENDGRID_TEMPLATE_FREE_TIER_EXPIRY_1`, `SENDGRID_TEMPLATE_FREE_TIER_EXPIRY_2`, `SENDGRID_TEMPLATE_FREE_TIER_EXPIRY_3`)
-- **Pending manual step (2026-05-08):** Add `CAPTCHA_API_KEY` to Railway `web` service env — same value as on the worker. Required for 2Captcha balance auto-alert (`app/captcha_balance.py`). Until added, balance checks will silently skip (logged as warning). Optional: `CAPTCHA_BALANCE_ALARM_THRESHOLD_USD=5.0` to override default.
+- 25 service env vars (added 2026-05-03: `ALARM_THRESHOLD_POLLS=10`, `ALARM_EMAIL_TO=hello@goodlie.golf`, `ALARM_EMAIL_FROM=hello@goodlie.golf`; added 2026-05-07: `SENDGRID_TEMPLATE_FREE_TIER_EXPIRY_1`, `SENDGRID_TEMPLATE_FREE_TIER_EXPIRY_2`, `SENDGRID_TEMPLATE_FREE_TIER_EXPIRY_3`; added 2026-05-08: `CAPTCHA_API_KEY` for 2Captcha balance auto-alert)
 
 ### Supabase
 - Project ID: `offtdltmvjfizkoeywei`
@@ -843,10 +846,10 @@ Admin
 3. ~~`auth.users` ↔ `user_profiles` gap~~ ✓ closed 2026-05-03 afternoon (14 orphans deleted).
 4. ~~Migration system not in use~~ ✓ closed 2026-05-03 (in use, 2 files committed).
 5. ~~No Supabase backups configured~~ ✓ closed 2026-05-03 afternoon (weekly local pg_dump → Google Drive).
-6. ~~No worker healthcheck endpoint — Railway can't auto-detect stuck-but-running worker~~ ✓ closed 2026-05-08 — `/healthz` shipped in foreward-scraper commit `b2ea3ad`. Railway healthcheck wired in `railway.json`. See decision log entry 2026-05-08 (evening).
+6. ~~No worker healthcheck endpoint — Railway can't auto-detect stuck-but-running worker~~ ✓ closed 2026-05-08 — `/healthz` endpoint shipped on foreward-scraper (commit `b2ea3ad`). aiohttp web server runs as background asyncio task; `mark_poll_completed()` updates in-process timestamp; handler reads timestamp without hitting the DB. Three states: starting (90s grace) / healthy (<180s since last poll) / stale (≥180s, returns 503). Railway healthcheck wired via `railway.json` `deploy.healthcheckPath`. Local testing passed all three states.
 7. **`GTG_ACCOUNT` (singular) on worker vs `GTG_ACCOUNTS` (plural) on API** — multi-account migration half-done.
 8. ~~README in `foreward-api` still says "Tee Sniper API"~~ ✓ closed 2026-05-08 — verified rebranded in commit `a6a9730`
-9. ~~2Captcha balance has no auto-monitoring — silent failure mode if balance hits zero~~ ✓ closed 2026-05-08 — `app/captcha_balance.py` polls balance directly from API service every 15 min, fires alarm/recovery email on threshold transitions. Alarm at `CAPTCHA_BALANCE_ALARM_THRESHOLD_USD` (default $5.00). Requires `CAPTCHA_API_KEY` on Railway `web` service env (see decision log 2026-05-08 /healthz evening).
+9. ~~2Captcha balance has no auto-monitoring — silent failure mode if balance hits zero~~ ✓ closed 2026-05-08 — balance auto-alert shipped on foreward-api (commit `29f0e3a`). Migration `20260508_add_captcha_balance_alarm_state.sql` applied to prod (3 new columns on `scraper_health`). Check fires every 15 min via `/scraper-heartbeat`. Alarm threshold $5 USD (configurable via `CAPTCHA_BALANCE_ALARM_THRESHOLD_USD`). Email alarm + recovery via existing `send_alarm_email` infra. `CAPTCHA_API_KEY` env var added to Railway `web` service. Verified live in prod 2026-05-08 — first check succeeded (balance $16.53, ~26 days runway at current ~$0.43/day burn rate).
 10. **Meta ad account trust issues** affecting parent operator's brands.
 11. **Scraper writes status via API endpoints, not direct Supabase.** If alerts get stuck in `active` despite firing, check API logs first.
 12. **61 orphan rows in `sent_slots`** (`user_id IS NULL`) from pre-launch test alerts. Harmless. Optional cleanup deferred.
@@ -856,7 +859,7 @@ Admin
 16. **Railway "Wait for CI" toggle off** on both services. CI is advisory until enabled. Both workflows passing reliably as of 2026-05-03.
 17. ~~GolfNow returning 0 slots persistently~~ ✓ **resolved 2026-05-03 PM, verified in production.** Was a false alarm. Root cause: the alert-driven filtering optimization (scrapers only fetch courses with at least one active user alert) makes platforms return 0 slots when no active alerts target their courses. The `consecutive_zero_polls` counter didn't distinguish "scraped → got 0" from "didn't scrape". Fundamentally incompatible with natural alert lifecycle churn. **Fix shipped (commit `bc527e3`):** `poll_golfnow_tee_times` and `poll_chronogolf_tee_times` return `None` instead of `[]` when short-circuiting; two call sites in `tee_sniper.py` detect `None` and reset the counter to 0 instead of incrementing. Real failures (HTTP 403, timeouts, exceptions inside `fetch_one`, captcha exhaustion) still return a list (possibly `[]`) and increment normally. Verified post-deploy: GolfNow 0/0, Chronogolf 0/0, dashboard Healthy. **Lesson learned:** the silent-failure alert system did its job — it surfaced a real measurement problem, just not the one we initially thought. The morning's 11:57 AM "test" alarm was likely also a false positive on the same root cause.
 
-18. **Admin dashboard hardcodes platform cards** as `[GTG, GolfNow, EZLinks, Chronogolf]`. EZLinks is retired but still rendered. Should be data-driven from `scraper_health.slots_last_poll` jsonb keys instead. Cosmetic — fix in Lovable when convenient.
+18. ~~Admin dashboard hardcodes platform cards~~ ✓ closed 2026-05-08 — admin platform cards now data-driven from `scraper_health.slots_last_poll` jsonb keys. Currently renders 3 cards (gtg, golfnow, chronogolf). EZLinks no longer surfaces. Verified live on goodlie.golf/admin.
 
 20. **ARCHITECTURE.md was lost from local filesystem on 2026-05-06 and recovered from Cowork project knowledge (2026-05-03 baseline). Recent updates between 2026-05-03 and 2026-05-06 (2Captcha balance auto-alert, ClickUp/doc reconciliation, By-request picker confirmation, alert form defaults patches) need to be re-derived from closed ClickUp tickets — tracked in ticket 86ahb0m91.**
 
@@ -869,6 +872,8 @@ Admin
 23. **Free-tier first_name fallback is hardcoded to "there"** in expiry email templates. `user_profiles` has no first_name column. Acceptable for launch since most users won't notice "Hey there," in a transactional email. Worth fixing once free-tier flows have real user data.
 
 24. **`COURSE_DISPLAY_NAMES` dict in `app/util/courses.py` is hardcoded** and won't reflect upstream renames automatically. Scraper fetches canonical names from external APIs at runtime (`sent_slots.course_name`); the dict is for email/SMS copy where no `sent_slots` row exists yet. Reconcile against scraper's runtime names ~quarterly.
+
+26. **Lovable summaries unreliable for verification.** Lovable's response summaries can claim work shipped when it didn't (e.g., 2026-05-08 noindex on `/admin` claimed 'already there, kept' — was actually missing from rendered DOM, required follow-up prompt). Always verify Lovable changes via Inspect → Elements → Cmd+F search in rendered DOM, OR by view-source on rendered page after publish + hard-refresh. Never trust the summary message alone. Lovable's optimism on completion ≠ actual deployment state.
 
 25. **Block 5b prod-side AC verification deferred.** The new free-tier alert creation gate ladder (503 → 403 → 402 → 402 → 200 on `POST /alerts`, gated by `FREE_TIER_ENABLED`) is shipped (commits `a2b519a`, `6d4d9bd`) and unit-tested but not prod-verified end-to-end. Same pattern as Block 3 verification: requires real signup with a fresh phone number. Pre-launch checklist tickets (ClickUp `86ahbkx68`, `86ahbfptb`) track this. Block 9 cutover (flag flip) MUST NOT happen until this verification passes. Plan: walk a real user through full signup → verify-phone → POST /alerts loop on a fresh phone, work backwards from the failure point if anything breaks.
 
@@ -924,6 +929,25 @@ ClickUp is the live source of truth — this list is point-in-time.
 ---
 
 ## Decision log
+
+### 2026-05-08 (late evening — reliability sprint)
+
+After Block 5b ship and Lovable signup rebuild earlier in the session, knocked out a sprint of reliability + cleanup work:
+
+**Test user cleanup:** Deleted test user dustinkeating87+freetier1@gmail.com (UID 87ba8c28-db02-4cd6-8641-6be29dd41f30) via direct Supabase. Cascade cleared associated user_profiles row. The other test user mentioned in the handoff (dustinkeating87+test@gmail.com) was already gone — handoff was stale. +16475155754 phone now unblocked for next-session real-user signup verification.
+
+**Worker /healthz endpoint shipped** (foreward-scraper commits `b2ea3ad` + foreward-api doc commit `62ce236`). Closes known issue #6. aiohttp background task on the scraper, in-process timestamp comparison, three states (starting/healthy/stale). Railway healthcheck wired. All three states tested locally.
+
+**2Captcha balance auto-alert shipped** (foreward-api commit `29f0e3a`, migration applied to prod). Closes known issue #9. 15-min polling cadence via `/scraper-heartbeat`, $5 alarm threshold, durable DB-backed state, transition-only alarm pattern (matches existing silent-failure alerts). Verified live in prod — first check returned $16.53. `CAPTCHA_API_KEY` added to Railway `web` service env vars.
+
+**Lovable batch shipped:** noindex on `/admin` (after one false-claim round), data-driven platform cards on `/admin` (3 cards instead of hardcoded 4 — EZLinks gone), dashboard alert toggle bound to `alert.status === 'active'` instead of legacy `active` column. Closes ClickUp `86ah69ypk`, `86ah8d3v1`, `86ahbkw5h` (latter two via comment-closure; status flipping is on Dustin). Closes known issue #18.
+
+**New known issue #26 (Lovable summaries unreliable):** Lovable claimed noindex was 'already there' on first round when it wasn't. Always verify Lovable changes via rendered-DOM inspection, never trust summary alone. Documented as known issue #26.
+
+Lessons:
+1. Direct Supabase access via the connector is a real productivity multiplier vs. having Claude Code do schema work — when the change is small (single migration, single delete), connector is faster and self-verifying.
+2. End-of-block doc updates should batch reliability work + cleanup work + Lovable work into one entry rather than spreading across separate commits. This is the cleanest record of "what shipped tonight."
+3. Lovable's summary claims now require independent verification, especially for missing-element work like meta tags. View-source or Elements-inspector is the only ground truth.
 
 ### 2026-05-08 (2Captcha balance auto-alert shipped)
 
