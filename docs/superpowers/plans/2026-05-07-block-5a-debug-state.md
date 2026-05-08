@@ -84,3 +84,15 @@ Must be set to `true` before resuming AC1 tomorrow. Reset to `false` after.
 - Auth router (fixed): `app/routers/auth.py`
 - Tests: `tests/test_signup_free_tier.py`
 - Architecture note: `docs/ARCHITECTURE.md` (phone_verification_codes Known Issues + decision log)
+
+---
+
+## 2026-05-08 closeout
+
+AC1 verified PASS by data inspection (no fresh re-run needed). The 22:19:07 UTC signup of dustinkeating87+freetier1@gmail.com on +16475155754 — captured the night this debug doc was written — turned out to be a successful happy-path run. All fields land where the spec requires:
+- auth.users exists with email_confirmed_at and last_sign_in_at
+- user_profiles.phone_verified=true, free_tier_used_at set, Stripe fields NULL, is_active=false
+- phone_verification_codes.token_expires_at set to ~signup time (token immediately invalidated)
+- 0 alert_profiles for the user (correct — Block 5b ships alert creation)
+
+Block 5a closed. See ARCHITECTURE.md decision log entry dated 2026-05-08 for full retro.

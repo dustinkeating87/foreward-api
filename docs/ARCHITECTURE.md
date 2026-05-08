@@ -883,6 +883,37 @@ Rationale: coupons are conversion optimization with no audience pre-launch (FREE
 - Stale verification tokens cause same 401 as wrong-phone tokens. Distinct error messages cost nothing and save real debugging time.
 - Phase 1 (gather facts) before Phase 2 (form hypothesis) caught the mismatched-phone diagnosis in one DB query rather than another guess-and-check loop.
 
+### 2026-05-08 (Block 5a — free-tier signup endpoint, VERIFIED CLOSED)
+
+POST /auth/signup-free-tier endpoint shipped, fixed, and verified end-to-end. Block 5a master ticket pending closeout (86ahbkwf6 still open — spans 5a+5b+5c). Plan doc: docs/superpowers/plans/2026-05-07-block-5a-free-tier-signup-api.md. Debug-state addendum: docs/superpowers/plans/2026-05-07-block-5a-debug-state.md.
+
+Commit history (foreward-api/main):
+- 13bf5b6 — initial endpoint scaffold
+- 9c9143f — 500-on-bogus-token fix (AC7)
+- fad2887 — used-flag dual-semantics fix (the real bug, root cause below)
+- c4ea790 — diagnostic logging revert (clean state)
+
+Root cause of the AC1 401 bug (fad2887): phone_verification_codes.used was being written to True by /auth/verify-phone (correct — marks OTP consumed) AND being read as a token-replay guard in /auth/signup-free-tier. Since used=True for any legitimately issued token, the happy path was unreachable. Fix: stopped reading used in signup_free_tier; replaced post-signup write of used=True with token_expires_at=NOW() so token replay is gated by expiry instead. The verification_token field is intentionally NOT nulled on signup — replay protection is via token_expires_at being set to the past.
+
+AC verification (all PASS as of 2026-05-08):
+- AC0 kill switch → 503 — unit test
+- AC1 happy path end-to-end — verified by data inspection of dustinkeating87+freetier1@gmail.com signup on 2026-05-07 22:19:07 UTC (auth.users + email_confirmed_at + last_sign_in_at + user_profiles.phone_verified=true + free_tier_used_at set + Stripe fields NULL + is_active=false + token_expires_at set to ~signup time + 0 alert_profiles, matching the spec)
+- AC2 expired token → 401 — unit test
+- AC3 phone mismatch → 401 — unit test
+- AC4 phone already claimed → 409 — unit test
+- AC5 email already exists → 409 — unit test
+- AC6 compensating delete on mid-flow failure → 500 — unit test
+- AC7 bogus token → 401 (not 500) — unit + production curl
+
+Diagnostic-logging detour: commit e4a8a93 added temporary logging during the 401 investigation; reverted in c4ea790 once the dual-semantics root cause was identified. Captured here so the e4a8a93→c4ea790 commit pair has documented intent.
+
+Block 5b (free-tier alert creation, modifies POST /alerts) and Block 5c (Lovable signup prompt skeleton) plan docs exist at docs/superpowers/plans/2026-05-07-block-5b-*.md and 2026-05-07-block-5c-*.md. Pending separate sessions.
+
+Cleanup deferred:
+- The freetier1 test user (UID 87ba8c28-db02-4cd6-8641-6be29dd41f30) and its phone_verification_codes row (id ed812333) should be deleted before launch to free up the +16475155754 phone for real use. Tracked alongside the existing Block 3 cleanup item for dustinkeating87+test@gmail.com.
+
+Bug 86ahbkw2n ("2 renewals remaining" copy mismatch from Block 3 verification) remains open and is now expected to be addressed as part of Block 4b or wherever the user-facing free-tier email copy gets revisited.
+
 ### 2026-05-07 (Block 3 — free-tier alert lifecycle, VERIFIED)
 
 Block 3 implementation complete and verified in production. 7 commits (b108f76..13d2bde) on foreward-api/main, 21 new tests passing (29 total). Verification script scripts/verify_block_3.py (gitignored) confirmed AC1 (paid no-regression) and AC7 (expiry sweep) PASS against deployed Railway API. Plan doc: foreward-api/docs/superpowers/plans/2026-05-07-block-3-free-tier-alert-lifecycle.md. Master ticket 86ahavm5n. Block 3 ticket 86ahazaza. Closed 86ahbacxw with Task 1.
