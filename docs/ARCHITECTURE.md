@@ -586,6 +586,7 @@ No staging environment. Auto-deploy on push (modulo "Wait for CI" if enabled). R
 | Signal | Where | Refresh |
 |---|---|---|
 | Scraper heartbeat | `scraper_health` row id=1; `/admin/scraper-health` | every 60s |
+| Worker liveness | `GET /healthz` on foreward-scraper (port `$PORT`, default 8080). 200 = healthy (poll completed within 180s). 503 = stale or starting-grace-exceeded. Railway probes this path. | every ~30s (Railway) |
 | Per-platform slot counts | `scraper_health.slots_last_poll` (jsonb) | every 60s |
 | Per-platform alarm streak | `scraper_health.consecutive_zero_polls` (jsonb) | every 60s |
 | Silent-failure alerts | Email to `hello@goodlie.golf` on threshold cross or recovery | per-event |
@@ -841,7 +842,7 @@ Admin
 3. ~~`auth.users` ↔ `user_profiles` gap~~ ✓ closed 2026-05-03 afternoon (14 orphans deleted).
 4. ~~Migration system not in use~~ ✓ closed 2026-05-03 (in use, 2 files committed).
 5. ~~No Supabase backups configured~~ ✓ closed 2026-05-03 afternoon (weekly local pg_dump → Google Drive).
-6. **No worker healthcheck endpoint** — Railway can't auto-detect stuck-but-running worker. Spec ready (ClickUp `86ah8bq8w`).
+6. ~~No worker healthcheck endpoint — Railway can't auto-detect stuck-but-running worker~~ ✓ closed 2026-05-08 — `/healthz` shipped in foreward-scraper commit `b2ea3ad`. Railway healthcheck wired in `railway.json`. See decision log entry 2026-05-08 (evening).
 7. **`GTG_ACCOUNT` (singular) on worker vs `GTG_ACCOUNTS` (plural) on API** — multi-account migration half-done.
 8. ~~README in `foreward-api` still says "Tee Sniper API"~~ ✓ closed 2026-05-08 — verified rebranded in commit `a6a9730`
 9. **2Captcha balance has no auto-monitoring** — silent failure mode if balance hits zero. Spec ready (ClickUp `86ah8bq89`). Current balance $18.72 (~18 days).
@@ -922,6 +923,10 @@ ClickUp is the live source of truth — this list is point-in-time.
 ---
 
 ## Decision log
+
+### 2026-05-08 (/healthz worker liveness endpoint shipped)
+
+`GET /healthz` added to foreward-scraper (commit `b2ea3ad`). Runs an aiohttp server on `$PORT` (default 8080) as a background asyncio task alongside the main poll loop. The health signal is an in-process `float` timestamp written by `mark_poll_completed()` at the end of each successful poll iteration — no DB reads inside the handler. Response contract: 200 `{"status":"starting"}` within 90s grace period on startup; 200 `{"status":"healthy","seconds_since_last_poll":N}` while fresh; 503 `{"status":"stale",...}` after 180s without a completed poll (3× the 60s poll interval). Railway `healthcheckPath` set to `/healthz` in `railway.json`. Closes ClickUp `86ah8bq8w` and known issue #6.
 
 ### 2026-05-08 (evening session — Block 5b ship + Lovable signup rebuild + cleanup)
 
