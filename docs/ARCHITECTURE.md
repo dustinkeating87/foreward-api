@@ -823,7 +823,7 @@ Admin
 
 19. **Possible vestigial Lakeview code in `tee_sniper.py`.** Earlier versions of this doc described an inline Lakeview scraper with cookie refresh / Cloudflare 403 handling. No `[lakeview]` log lines fire at runtime, so the code (if it exists) isn't called from the main poll loop. Next session: `grep -ri lakeview ~/foreward-scraper/`. If dead code, delete. If reachable but unwired, decide whether to revive (Lakeview-direct gives richer data than GolfNow proxy) or consolidate on GolfNow path.
 
-21. **Local Python 3.9.6 vs Railway Python 3.11 — `fromisoformat` drift.** Python 3.9's `datetime.fromisoformat` rejects timestamps with non-6-digit fractional seconds (e.g. 5-digit microseconds). Supabase/PostgREST can return any precision. Railway runs 3.11 (full ISO 8601 support) so prod is unaffected, but local runs can crash. The fix pattern is `_parse_iso()` in `app/routers/phone_verification.py` (added Block 2): normalize fractional seconds to 6 digits with a regex before calling `fromisoformat`. Three out-of-scope call sites still use the raw pattern: `heartbeat_monitor.py:30`, `routers/auth.py:93`, `routers/admin.py:147` — tracked in ClickUp `86ahbacxw`.
+21. ~~Local Python 3.9.6 vs Railway Python 3.11 — `fromisoformat` drift~~ ✓ closed 2026-05-08 (ClickUp `86ahbacxw`). `_parse_iso()` centralized in `app/util/dates.py`; all three out-of-scope call sites (`heartbeat_monitor.py`, `routers/auth.py`, `routers/admin.py`) confirmed patched. 67/67 tests pass on Python 3.9.6.
 
 22. **Supabase SQL editor shows "0 rows" for UPDATE without RETURNING.** The editor reports "0 rows" for any DML statement that doesn't include a `RETURNING` clause, regardless of how many rows were actually affected. Always append `RETURNING id` (or similar) when row count matters during a test or migration verify.
 
@@ -1041,7 +1041,7 @@ Verification token design: on successful `verify-phone`, a URL-safe UUID token i
 
 **AC5 spec gap:** first resend has no cooldown — `last_resend_at` is NULL on row creation, so the 60s check is bypassed on the first resend. Cooldown only applies resend→resend. Flagged for Block 5 fix.
 
-**Python 3.9 / Railway 3.11 patch:** `app/routers/phone_verification.py` has a `_parse_iso()` helper (added this session) that normalizes fractional seconds to 6 digits before calling `fromisoformat`. Applies at the three Supabase timestamp reads (lines 156, 202, 216). Required because Python 3.9 `fromisoformat` rejects non-6-digit microseconds and Supabase/PostgREST can return any precision. Railway runs Python 3.11 — prod unaffected. Three out-of-scope call sites (`heartbeat_monitor.py:30`, `routers/auth.py:93`, `routers/admin.py:147`) remain unpatched; tracked in ClickUp `86ahbacxw`.
+**Python 3.9 / Railway 3.11 patch:** `_parse_iso()` helper added in Block 2 and centralized in `app/util/dates.py`. Normalizes fractional seconds to 6 digits before calling `fromisoformat`. Required because Python 3.9 rejects non-6-digit microseconds; Supabase/PostgREST returns any precision. Railway runs 3.11 — prod unaffected. All four call sites patched: `phone_verification.py`, `heartbeat_monitor.py`, `routers/auth.py`, `routers/admin.py`. ClickUp `86ahbacxw` closed 2026-05-08.
 
 ClickUp `86ahaza0k` closed.
 
