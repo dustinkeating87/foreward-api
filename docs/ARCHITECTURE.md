@@ -363,7 +363,7 @@ foreward-scraper/
 │       └── ci.yml              ← parse-check on push to main (added 2026-05-03)
 ├── alerts.json                 ← config/test fixture
 ├── chronogolf_scraper.py       ← excluded from ALERTING_PLATFORMS — no GTA courses
-├── ezlinks_scraper.py          ← RETIRED Apr 27, 2026
+├── ~~ezlinks_scraper.py~~      ← deleted 2026-05-08 (commit 1bad5cf foreward-scraper)
 ├── golfnow_scraper.py          ← active
 ├── tee_sniper.py               ← main module; one-shot firing, mark_taken, expire
 ├── Dockerfile
@@ -384,7 +384,7 @@ foreward-scraper/
 |---|---|---|---|---|
 | **GolfNow** | active | no | none | `golfnow_scraper.py` (covers Lakeview, BraeBen, Eagles Nest, Royal Woodbine, Pickering Glen, Winchester, Angus Glen N, Remington Valley, Remington Upper, Flemingdon Park) |
 | **Golf The 6ix (GTG)** | active | yes (Cloudflare Turnstile via 2Captcha) | account login (`GTG_EMAIL`/`GTG_PASSWORD`); singular `GTG_ACCOUNT` on worker, plural `GTG_ACCOUNTS` on api — migration in progress | inline in `tee_sniper.py` |
-| **EZLinks** | retired 2026-04-27 | — | — | `ezlinks_scraper.py` (kept as dead code) |
+| **EZLinks** | retired 2026-04-27 | — | — | `ezlinks_scraper.py` deleted 2026-05-08 (commit `1bad5cf`) |
 | **Chronogolf** | tracked but excluded from ALERTING_PLATFORMS | — | — | `chronogolf_scraper.py` |
 
 **Note (2026-05-03 PM):** Earlier versions of this doc listed Lakeview Golf Course as a separate platform with an inline scraper in `tee_sniper.py` and a Cloudflare 403 known issue. **That was wrong.** Worker logs confirm only three platform tags fire at runtime: `[gtg]`, `[golfnow]`, `[chronogolf]`. Lakeview is a *course* on the GolfNow platform (course key `lakeview`, GolfNow ID 8409). All Lakeview alert emails are sent via the GolfNow scraper. Whether vestigial Lakeview-direct scraping code still exists in `tee_sniper.py` is unverified — needs a `grep -ri lakeview` next session. If found, decide: delete (consolidate on GolfNow) or wire up + add to heartbeat.
@@ -821,7 +821,7 @@ Admin
 
 20. **ARCHITECTURE.md was lost from local filesystem on 2026-05-06 and recovered from Cowork project knowledge (2026-05-03 baseline). Recent updates between 2026-05-03 and 2026-05-06 (2Captcha balance auto-alert, ClickUp/doc reconciliation, By-request picker confirmation, alert form defaults patches) need to be re-derived from closed ClickUp tickets — tracked in ticket 86ahb0m91.**
 
-19. **Vestigial EZLinks scraper in `foreward-scraper/ezlinks_scraper.py` — candidate for deletion.** Audited 2026-05-08 (commit below). The "cookie refresh / Cloudflare 403 handling" mentioned in earlier doc versions is `foreward-scraper/ezlinks_scraper.py` (229 lines) — not a standalone Lakeview file, but the whole EZLinks platform scraper which configured Lakeview as one of its courses. EZLinks was retired 2026-04-27. Confirmed dead: `tee_sniper.py` has zero imports or calls to anything in `ezlinks_scraper.py`. Lakeview is actively and correctly served by `golfnow_scraper.py` (`course_key: "lakeview"`, `facility_id: 8409`). No other dead Lakeview code found — all other hits are active GolfNow config or informative comments. **Action: delete `foreward-scraper/ezlinks_scraper.py` in a follow-up session after confirming nothing else references it.**
+19. ~~Possible vestigial Lakeview code in `tee_sniper.py`~~ ✓ closed 2026-05-08 — audit confirmed the "vestigial Lakeview code" was actually the retired EZLinks platform scraper (`ezlinks_scraper.py`); deleted in commit `1bad5cf` (foreward-scraper). It was never a Lakeview-specific scraper — it was the whole EZLinks platform module which happened to configure Lakeview as one of its courses. The original "inline Lakeview scraper" framing in the doc was misleading. Lakeview is actively and correctly served by `golfnow_scraper.py`.
 
 21. ~~Local Python 3.9.6 vs Railway Python 3.11 — `fromisoformat` drift~~ ✓ closed 2026-05-08 (ClickUp `86ahbacxw`). `_parse_iso()` centralized in `app/util/dates.py`; all three out-of-scope call sites (`heartbeat_monitor.py`, `routers/auth.py`, `routers/admin.py`) confirmed patched. 67/67 tests pass on Python 3.9.6.
 
