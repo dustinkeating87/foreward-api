@@ -127,12 +127,10 @@ def signup_free_tier(body: SignupFreeTierRequest):
 
     # Compensating-action wrapper: profile update + mark token used
     try:
-        now_iso = datetime.now(timezone.utc).isoformat()
         supabase_admin.table("user_profiles").update({
             "phone_verified": True,
             "phone_hash": phone_hash,
             "notify_phone": body.phone_e164,
-            "free_tier_used_at": now_iso,
         }).eq("id", user_id).execute()
 
         supabase_admin.table("phone_verification_codes").update({
