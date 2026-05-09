@@ -14,10 +14,6 @@ class Settings(BaseSettings):
     cancel_url: str = "http://localhost:3000/cancel"
     free_tier_enabled: bool = False
     frontend_url: str = "http://localhost:3000"
-    stripe_free_tier_coupon_id: str = ""
-    sendgrid_template_free_tier_expiry_1: str = ""
-    sendgrid_template_free_tier_expiry_2: str = ""
-    sendgrid_template_free_tier_expiry_3: str = ""
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 

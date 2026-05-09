@@ -1,7 +1,6 @@
 import os
 import httpx
 import logging
-from typing import Optional
 
 log = logging.getLogger(__name__)
 
@@ -117,37 +116,19 @@ def send_heartbeat_recovery_email(was_stale_seconds: int, threshold_seconds: int
     )
 
 
-def send_free_tier_expiry_email(to: str, alert_id: str, renewals_used: int, renewal_link: str) -> None:
-    # Signature frozen: Block 4 replaces body with SendGrid template call, not this signature.
-    renewals_remaining = 2 - renewals_used
-    plural = "s" if renewals_remaining != 1 else ""
+def send_free_tier_non_firing_expiry_email(to: str, alert_id: str, retry_link: str) -> None:
+    """Sent when a free-tier alert hits date_to without ever firing.
+    The user gets one chance to reset with a new date range — this email surfaces that."""
     send_email(
         to,
-        "Good Lie Golf — no tee times opened up in your window",
+        "Your Good Lie alert ran out — try again on us",
         (
-            f"Unfortunately no tee times opened up matching your alert during the 14-day window.\n\n"
-            f"You have {renewals_remaining} renewal{plural} remaining.\n\n"
-            f"Renew your alert (one click): {renewal_link}\n\n"
-            "You can also edit your criteria before renewing by visiting goodlie.golf."
-        ),
-    )
-
-
-def send_final_expiry_email(to: str, discount_code: Optional[str]) -> None:
-    # Signature frozen: Block 4 replaces body with SendGrid template call, not this signature.
-    coupon_section = (
-        f"\n\nAs a thank-you for trying Good Lie Golf, here's 50% off your first month: {discount_code}\n"
-        "This code expires in 7 days. Redeem at goodlie.golf/billing."
-        if discount_code
-        else ""
-    )
-    send_email(
-        to,
-        "Good Lie Golf — your free alert period has ended",
-        (
-            "Your free alert has run through all 3 polling windows (42 days) without a match.\n\n"
-            "Subscribe to Good Lie Golf for unlimited real-time alerts at $9.99/mo.\n"
-            "Visit goodlie.golf to get started."
-            f"{coupon_section}"
+            f"Your free Good Lie alert just expired without finding a tee time.\n\n"
+            f"That's not the demo we promised. Here's a one-time retry — set a new date range "
+            f"and we'll keep watching:\n\n"
+            f"{retry_link}\n\n"
+            f"This is your last shot on the free tier. After this, you'll need to subscribe "
+            f"to keep getting alerts.\n\n"
+            f"— Good Lie"
         ),
     )

@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Depends, Query
@@ -74,47 +74,66 @@ def create_alert(body: AlertProfileCreate, ctx=Depends(get_current_user_with_pro
     if not settings.free_tier_enabled:
         raise HTTPException(status_code=403, detail="Active subscription required")
 
-    if profile.get("final_expired_at"):
-        # Phone permanently ineligible for free tier
+    now = datetime.now(timezone.utc)
+
+    if profile.get("free_tier_used_at") is None:
+        # First free alert
+        payload = {
+            "user_id": user_id,
+            "courses": body.courses,
+            "date_from": body.date_from.isoformat(),
+            "date_to": body.date_to.isoformat(),
+            "time_from": body.time_from,
+            "time_to": body.time_to,
+            "players": body.players,
+            "holes": body.holes,
+            "notify_email": body.notify_email,
+            "notify_phone": body.notify_phone,
+            "active": body.active,
+            "is_free_tier": True,
+        }
+        result = supabase_admin.table("alert_profiles").insert(payload).execute()
+        if not result.data:
+            raise HTTPException(status_code=500, detail="Failed to create alert")
+        supabase_admin.table("user_profiles").update({
+            "free_tier_used_at": now.isoformat(),
+        }).eq("id", user_id).execute()
+        log.info("free_tier_create: alert=%s user=%s", result.data[0]["id"], user_id[:8])
+        return result.data[0]
+
+    # User has used their first free alert — check grace retry eligibility
+    if profile.get("free_tier_grace_retry_used_at") is not None:
         raise HTTPException(status_code=402, detail="Payment required to create alerts")
 
-    concurrent = (
+    prior_result = (
         supabase_admin.table("alert_profiles")
-        .select("id", count="exact")
+        .select("id, status")
         .eq("user_id", user_id)
         .eq("is_free_tier", True)
-        .in_("status", ["active", "fired"])
-        .neq("expiry_state", "final_expired")
-        .execute()
-    )
-    if (concurrent.count or 0) >= 1:
-        raise HTTPException(status_code=402, detail="Payment required to create additional alerts")
-
-    # Free-tier requires exactly one course
-    if len(body.courses) != 1:
-        raise HTTPException(status_code=400, detail="Free-tier alerts must target exactly one course.")
-
-    course_key = body.courses[0]
-
-    # Course must be actively polled by at least one paid alert
-    polled = (
-        supabase_admin.table("alert_profiles")
-        .select("id", count="exact")
-        .eq("status", "active")
-        .eq("is_free_tier", False)
-        .contains("courses", [course_key])
+        .order("created_at", desc=True)
         .limit(1)
         .execute()
     )
-    if not (polled.count and polled.count > 0):
-        raise HTTPException(
-            status_code=400,
-            detail="This course isn't currently being monitored. Try one of the available courses.",
-        )
+    if not prior_result.data:
+        log.warning("free_tier: free_tier_used_at set but no prior alert found user=%s", user_id[:8])
+        raise HTTPException(status_code=402, detail="Payment required to create alerts")
 
-    now = datetime.now(timezone.utc)
-    polling_expires_at = (now + timedelta(days=14)).isoformat()
+    prior = prior_result.data[0]
 
+    if prior["status"] != "expired":
+        raise HTTPException(status_code=402, detail="Payment required to create alerts")
+
+    fired_check = (
+        supabase_admin.table("sent_slots")
+        .select("id")
+        .eq("alert_id", prior["id"])
+        .limit(1)
+        .execute()
+    )
+    if fired_check.data:
+        raise HTTPException(status_code=402, detail="Payment required to create alerts")
+
+    # Eligible for grace retry: prior alert expired without ever firing
     payload = {
         "user_id": user_id,
         "courses": body.courses,
@@ -128,25 +147,14 @@ def create_alert(body: AlertProfileCreate, ctx=Depends(get_current_user_with_pro
         "notify_phone": body.notify_phone,
         "active": body.active,
         "is_free_tier": True,
-        "polling_expires_at": polling_expires_at,
-        "renewals_used": 0,
     }
-
     result = supabase_admin.table("alert_profiles").insert(payload).execute()
     if not result.data:
         raise HTTPException(status_code=500, detail="Failed to create alert")
-
-    # Mark free-tier as consumed on the user profile. Set once, never cleared.
     supabase_admin.table("user_profiles").update({
-        "free_tier_used_at": now.isoformat(),
+        "free_tier_grace_retry_used_at": now.isoformat(),
     }).eq("id", user_id).execute()
-
-    log.info(
-        "free_tier_create: alert=%s user=%s expires=%s",
-        result.data[0]["id"],
-        user_id[:8],
-        polling_expires_at,
-    )
+    log.info("free_tier_grace_retry: alert=%s user=%s", result.data[0]["id"], user_id[:8])
     return result.data[0]
 
 
@@ -173,11 +181,13 @@ def list_alerts(
 def update_alert(alert_id: str, body: AlertProfileUpdate, ctx=Depends(get_current_user_with_profile)):
     _require_subscription_or_free_tier(ctx["profile"])
     user_id = str(ctx["user"].id)
-    paid = _is_paid(ctx["profile"])
+
+    if settings.free_tier_enabled and not _is_paid(ctx["profile"]):
+        raise HTTPException(status_code=402, detail="Subscribe to edit alerts")
 
     existing = (
         supabase_admin.table("alert_profiles")
-        .select("id, is_free_tier, status")
+        .select("id")
         .eq("id", alert_id)
         .eq("user_id", user_id)
         .maybe_single()
@@ -185,15 +195,6 @@ def update_alert(alert_id: str, body: AlertProfileUpdate, ctx=Depends(get_curren
     )
     if not existing.data:
         raise HTTPException(status_code=404, detail="Alert not found")
-
-    # Free-tier paywall: editing a fired alert requires subscription
-    if (
-        settings.free_tier_enabled
-        and existing.data.get("is_free_tier")
-        and existing.data.get("status") == "fired"
-        and not paid
-    ):
-        raise HTTPException(status_code=402, detail="Subscribe to edit and retry alerts")
 
     updates = body.model_dump(exclude_none=True, exclude={"course"})
     if "date_from" in updates:
@@ -218,6 +219,9 @@ def update_alert(alert_id: str, body: AlertProfileUpdate, ctx=Depends(get_curren
 def delete_alert(alert_id: str, ctx=Depends(get_current_user_with_profile)):
     _require_subscription_or_free_tier(ctx["profile"])
     user_id = str(ctx["user"].id)
+
+    if settings.free_tier_enabled and not _is_paid(ctx["profile"]):
+        raise HTTPException(status_code=402, detail="Subscribe to manage alerts")
 
     existing = (
         supabase_admin.table("alert_profiles")
@@ -256,11 +260,13 @@ def retry_alert(alert_id: str, ctx=Depends(get_current_user_with_profile)):
     from datetime import date
     _require_subscription_or_free_tier(ctx["profile"])
     user_id = str(ctx["user"].id)
-    paid = _is_paid(ctx["profile"])
+
+    if settings.free_tier_enabled and not _is_paid(ctx["profile"]):
+        raise HTTPException(status_code=402, detail="Subscribe to retry alerts")
 
     existing = (
         supabase_admin.table("alert_profiles")
-        .select("id, date_to, is_free_tier")
+        .select("id, date_to")
         .eq("id", alert_id)
         .eq("user_id", user_id)
         .maybe_single()
@@ -272,64 +278,5 @@ def retry_alert(alert_id: str, ctx=Depends(get_current_user_with_profile)):
     if existing.data["date_to"] < date.today().isoformat():
         raise HTTPException(status_code=400, detail="Alert end date has passed — edit dates before retrying")
 
-    # Free-tier paywall: retry requires a subscription
-    if settings.free_tier_enabled and existing.data.get("is_free_tier") and not paid:
-        raise HTTPException(status_code=402, detail="Subscribe to retry alerts")
-
     supabase_admin.table("alert_profiles").update({"status": "active"}).eq("id", alert_id).eq("user_id", user_id).execute()
     return {"id": alert_id, "status": "active"}
-
-
-@router.post("/alerts/{alert_id}/renew")
-def renew_alert(alert_id: str, ctx=Depends(get_current_user_with_profile)):
-    if not settings.free_tier_enabled:
-        raise HTTPException(status_code=503, detail="Free tier is not yet available.")
-
-    user_id = str(ctx["user"].id)
-
-    existing = (
-        supabase_admin.table("alert_profiles")
-        .select("id, is_free_tier, renewals_used, expiry_state")
-        .eq("id", alert_id)
-        .eq("user_id", user_id)
-        .maybe_single()
-        .execute()
-    )
-    if not existing.data:
-        raise HTTPException(status_code=404, detail="Alert not found")
-
-    alert = existing.data
-
-    if not alert.get("is_free_tier"):
-        raise HTTPException(status_code=400, detail="Renewal is not applicable to this alert")
-
-    renewals_used = alert.get("renewals_used") or 0
-    if renewals_used >= 2:
-        raise HTTPException(status_code=402, detail="Maximum renewals reached. Subscribe to continue.")
-
-    if alert.get("expiry_state") != "expired_pending_renewal":
-        raise HTTPException(status_code=400, detail="Alert is not pending renewal")
-
-    now = datetime.now(timezone.utc)
-    new_expires = (now + timedelta(days=14)).isoformat()
-    new_renewals_used = renewals_used + 1
-
-    supabase_admin.table("alert_profiles").update({
-        "renewals_used": new_renewals_used,
-        "polling_expires_at": new_expires,
-        "expiry_state": None,
-        "status": "active",
-    }).eq("id", alert_id).execute()
-
-    log.info(
-        "free_tier_renew: alert=%s renewals_used=%d expires=%s",
-        alert_id,
-        new_renewals_used,
-        new_expires,
-    )
-    return {
-        "id": alert_id,
-        "status": "active",
-        "polling_expires_at": new_expires,
-        "renewals_used": new_renewals_used,
-    }

@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 import time
 import smtplib
@@ -8,29 +9,27 @@ from typing import Optional
 from fastapi import FastAPI, HTTPException, Header, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from app.routers import auth, alerts, billing, invites, admin, course_requests, activity, phone_verification, courses
+from app.routers import auth, alerts, billing, invites, admin, course_requests, activity, phone_verification
 from app.database import supabase, supabase_admin
 from app.config import settings
 from app.heartbeat_monitor import heartbeat_monitor_loop
-from app.free_tier_expiry import free_tier_expiry_loop
 import httpx
+
+log = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app):
     app.state.ip_rate_limit = {}
     heartbeat_task = asyncio.create_task(heartbeat_monitor_loop())
-    expiry_task = asyncio.create_task(free_tier_expiry_loop())
     try:
         yield
     finally:
         heartbeat_task.cancel()
-        expiry_task.cancel()
-        for t in (heartbeat_task, expiry_task):
-            try:
-                await t
-            except asyncio.CancelledError:
-                pass
+        try:
+            await heartbeat_task
+        except asyncio.CancelledError:
+            pass
 
 app = FastAPI(title="Tee Sniper API", version="1.0.0", lifespan=lifespan)
 
@@ -50,7 +49,6 @@ app.include_router(admin.router)
 app.include_router(course_requests.router)
 app.include_router(activity.router)
 app.include_router(phone_verification.router)
-app.include_router(courses.router)
 
 # ── In-memory heartbeat store ──────────────────────────────────────────────────
 _heartbeat: dict = {"timestamp": None, "poll_count": None}
@@ -258,10 +256,40 @@ def expire_stale_alerts(x_api_key: Optional[str] = Header(default=None)):
     """Expire alert_profiles where date_to < today and status='active'."""
     _require_api_key(x_api_key)
     from datetime import date
+    from app.email import send_free_tier_non_firing_expiry_email
     today = date.today().isoformat()
     result = supabase_admin.table("alert_profiles").update({"status": "expired"}) \
         .lt("date_to", today).eq("status", "active").execute()
     expired = len(result.data) if result.data else 0
+
+    # Non-firing-expiry email for free-tier alerts that never fired
+    for alert in result.data or []:
+        if not alert.get("is_free_tier"):
+            continue
+        fired = (
+            supabase_admin.table("sent_slots")
+            .select("id")
+            .eq("alert_id", alert["id"])
+            .limit(1)
+            .execute()
+        )
+        if fired.data:
+            continue
+        user_result = (
+            supabase_admin.table("user_profiles")
+            .select("notify_email, free_tier_grace_retry_used_at")
+            .eq("id", alert["user_id"])
+            .maybe_single()
+            .execute()
+        )
+        user = user_result.data or {}
+        if user.get("notify_email") and user.get("free_tier_grace_retry_used_at") is None:
+            retry_link = f"{settings.frontend_url}/dashboard?retry_free_tier=1"
+            try:
+                send_free_tier_non_firing_expiry_email(user["notify_email"], alert["id"], retry_link)
+            except Exception:
+                log.error("non_firing_expiry_email: failed alert=%s", alert["id"])
+
     return {"ok": True, "expired": expired}
 
 
