@@ -1,6 +1,6 @@
 # Good Lie Golf — Architecture & Decision Log
 
-**Last verified:** 2026-05-08 (late evening — reliability sprint: /healthz, 2Captcha balance auto-alert, Lovable batch)
+**Last verified:** 2026-05-09 (Block 6 — free-tier cleanup & realignment: removed Block 3 lifecycle machinery, aligned with PRODUCT_FREE_TIER.md)
 **Maintained by:** Claude sessions, in collaboration with Dustin
 **Read this file at the start of any Good Lie Golf work.** It is the source of truth for how the app is built. ClickUp space `Good Lie Golf` (id `901313780791`) is the source of truth for *open work*. Both must be checked. If you make architectural decisions or learn schema details during a session, update this file before ending the session.
 
@@ -28,6 +28,14 @@ The product has been renamed twice. References in older code still use earlier n
 ### Internal terminology
 - **"Snipe" / "snipes"** = internal shorthand for an alert event. Inherited from "Tee Sniper" branding.
 - **NEVER use "snipe" in user-facing copy.** Always "alert," "match," or "opening." See `.auto-memory/goodliegolf_terminology.md`.
+
+---
+
+## Free Tier (product spec)
+
+The free tier is a guaranteed-successful demonstration of the product. New users sign up with phone+email, verify their phone, and get one free alert that behaves identically to a paid alert. After the alert fires, they receive one SMS + one email and are done — no retry, no second alert, no editing. The only path forward is a paid subscription. If the alert hits `date_to` without ever firing, the user gets exactly one grace retry. Phone and email are permanently locked to the account.
+
+Canonical spec: `docs/PRODUCT_FREE_TIER.md`. Any free-tier work must read that document first.
 
 ---
 
@@ -173,8 +181,8 @@ Extends `auth.users` 1:1 via `handle_new_user` trigger.
 | trial_end | timestamptz | YES | — | 7-day free trial expiry |
 | phone_verified | boolean | NO | false | Set true on successful 6-digit verification at free-tier signup |
 | free_tier_used_at | timestamptz | YES | — | Block 1 (2026-05-07) — set when user first uses free tier; lifetime once-only |
-| final_expired_at | timestamptz | YES | — | Block 1 — user-level free-tier final expiry timestamp |
 | phone_hash | text | YES | — | Block 2 — SHA-256 hexdigest of E.164 phone (no salt); used for uniqueness check |
+| free_tier_grace_retry_used_at | timestamptz | YES | NULL | Block 6 — set when free-tier user uses their one non-firing-expiry grace retry; NULL = grace available |
 
 **RLS:** `Users can read own profile` — `SELECT` for `public` role where `auth.uid() = id`.
 
@@ -199,10 +207,6 @@ Per-user saved alert criteria.
 | created_at | timestamptz | YES | now() | |
 | updated_at | timestamptz | YES | now() | |
 | is_free_tier | boolean | YES | false | Block 1 (2026-05-07) — true if alert was created under free-tier rules |
-| polling_expires_at | timestamptz | YES | — | Block 1 — 14-day polling window for free-tier alerts; NULL for paid |
-| renewals_used | integer | YES | 0 | Block 1 — count of free-tier renewals used (0 or 1) |
-| expiry_state | text | YES | — | Block 1 — NULL / expired_pending_renewal / final_expired |
-| final_expired_at | timestamptz | YES | — | Block 1 — set when alert hits final expiry on free tier |
 
 **Status semantics (one-shot model, locked 2026-05-03):**
 - `active` — scraper matches against this alert; SMS will fire on next match
@@ -334,6 +338,7 @@ Committed migrations:
 - `20260506_add_free_tier_columns.sql` — commit TBD (this session)
 - `20260506_add_phone_verification_codes.sql` — Block 2; committed, not yet applied to prod (Dustin applies via SQL Editor)
 - `20260508_add_captcha_balance_alarm_state.sql` — applied 2026-05-08, commit `29f0e3a` (3 new columns on `scraper_health` for 2Captcha balance auto-alert)
+- `20260509_simplify_free_tier.sql` — Block 6 cleanup, applied 2026-05-09; drops Block 3 lifecycle columns (5 columns from `alert_profiles` and `user_profiles`), drops `ix_alert_profiles_polling_expires_at_free_tier` index, adds `user_profiles.free_tier_grace_retry_used_at`
 
 `supabase_migrations.schema_migrations` table still does not exist; using the directory as the registry rather than the Supabase CLI's tracking system. Acceptable for this scale.
 
@@ -735,7 +740,7 @@ Auth
   POST   /auth/resend-verification-code ← FREE_TIER_ENABLED gate; 60s cooldown, max 3 resends per code
 
 Alerts (user-facing)
-  POST   /alerts
+  POST   /alerts                     ← non-paid users: one free alert + one grace retry on non-firing expiry (Block 6 simplified flow); 402 otherwise
   GET    /alerts                     ← accepts ?status= (comma-sep); defaults to status=active
   PUT    /alerts/{id}
   DELETE /alerts/{id}
@@ -877,6 +882,8 @@ Worker (foreward-scraper)
 
 25. **Block 5b prod-side AC verification deferred.** The new free-tier alert creation gate ladder (503 → 403 → 402 → 402 → 200 on `POST /alerts`, gated by `FREE_TIER_ENABLED`) is shipped (commits `a2b519a`, `6d4d9bd`) and unit-tested but not prod-verified end-to-end. Same pattern as Block 3 verification: requires real signup with a fresh phone number. Pre-launch checklist tickets (ClickUp `86ahbkx68`, `86ahbfptb`) track this. Block 9 cutover (flag flip) MUST NOT happen until this verification passes. Plan: walk a real user through full signup → verify-phone → POST /alerts loop on a fresh phone, work backwards from the failure point if anything breaks.
 
+27. **Free-tier API is aligned with PRODUCT_FREE_TIER.md as of 2026-05-09; Lovable frontend (course picker, dashboard CTA, grace-retry UX) is not yet aligned.** Frontend blocks are downstream of Block 6 and will be addressed in a separate Lovable pass before `FREE_TIER_ENABLED` is flipped to true.
+
 ---
 
 ## Outstanding ClickUp tasks (snapshot 2026-05-03 afternoon)
@@ -929,6 +936,26 @@ ClickUp is the live source of truth — this list is point-in-time.
 ---
 
 ## Decision log
+
+### 2026-05-09 (Block 6 — Free Tier Cleanup & Realignment)
+
+Ripped out the Block 3 free-tier lifecycle machinery (polling window, renewal ladder, Stripe coupon generation, paid-coverage course gating) and replaced it with the simple model documented in `docs/PRODUCT_FREE_TIER.md`: one alert, one SMS, one email, then convert; one grace retry on non-firing expiry.
+
+**What was undone:** `app/free_tier_expiry.py` (asyncio expiry sweep loop), `app/stripe_coupons.py` (coupon generator), `app/routers/courses.py` (paid-coverage `/courses/available-for-free-tier` gate), `app/util/courses.py`, `tests/test_free_tier_logic.py`, `tests/test_courses_util.py`; startup hook in `main.py` that booted `free_tier_expiry_loop`; `send_free_tier_expiry_email` + `send_final_expiry_email` in `email.py`; `stripe_free_tier_coupon_id` in `config.py`; Block 5b creation gate ladder in `alerts.py` (the expiry_state + renewals_used logic); `/alerts/{id}/renew` endpoint; lifecycle helpers in `dependencies.py`.
+
+**What was kept:** phone verification, signup endpoint (`/auth/signup-free-tier`), `free_tier_used_at` user column, `is_free_tier` alert column.
+
+**What was added:** `user_profiles.free_tier_grace_retry_used_at` column + creation-gate logic in `alerts.py`, `send_free_tier_non_firing_expiry_email` in `email.py`, non-firing-expiry email trigger in `main.py` `expire_stale_alerts`, canonical product spec `docs/PRODUCT_FREE_TIER.md`, salvaged tests `tests/test_dates_util.py` + `tests/test_free_tier_simple.py`.
+
+**Schema:** migration `20260509_simplify_free_tier.sql` applied to prod 2026-05-09. 5 columns dropped from `alert_profiles` (`polling_expires_at`, `renewals_used`, `expiry_state`, `final_expired_at`) and `user_profiles` (`final_expired_at`) — no data loss (verified zero non-null values pre-migration). 1 column added (`user_profiles.free_tier_grace_retry_used_at`). 1 index dropped (`ix_alert_profiles_polling_expires_at_free_tier`).
+
+**Code:** commit `64ef4b8` on `origin/main`. 14 files changed, net −485 lines. 47/47 tests passing.
+
+**Failure-pattern meta-note:** Prior sessions specified a more complex free tier than Dustin wanted. The drift went undetected because plan docs (especially Block 3) led with mechanism — expiry sweeps, renewal ladders, coupon generation, course gating — rather than user experience. Decision tables formatted as "ambiguities resolved" framed product-shape choices as technical decisions, which got rubber-stamped without the user-experience question being asked. Going forward, any work touching the free tier must read `docs/PRODUCT_FREE_TIER.md` at session start and operate within its bounds.
+
+**Out of scope:** Lovable frontend alignment (course picker, dashboard CTA, grace-retry UX) is a separate downstream block. End-to-end walkthrough on a real phone is gated on Lovable being aligned. `FREE_TIER_ENABLED` remains `false` in prod.
+
+**Canonical spec:** `docs/PRODUCT_FREE_TIER.md`.
 
 ### 2026-05-08 (late evening — reliability sprint)
 
