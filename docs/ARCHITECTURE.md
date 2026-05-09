@@ -1,6 +1,6 @@
 # Good Lie Golf — Architecture & Decision Log
 
-**Last verified:** 2026-05-09 (Block 6 — free-tier cleanup & realignment: removed Block 3 lifecycle machinery, aligned with PRODUCT_FREE_TIER.md)
+**Last verified:** 2026-05-09 (Block 7 — phone-verification UX hardening: per-phone rate limit, distinct 401 error strings, 50/50 tests)
 **Maintained by:** Claude sessions, in collaboration with Dustin
 **Read this file at the start of any Good Lie Golf work.** It is the source of truth for how the app is built. ClickUp space `Good Lie Golf` (id `901313780791`) is the source of truth for *open work*. Both must be checked. If you make architectural decisions or learn schema details during a session, update this file before ending the session.
 
@@ -735,7 +735,7 @@ Auth
   POST   /auth/signup-free-tier         ← FREE_TIER_ENABLED gate; consumes verification_token, creates auth user with tier=free
   POST   /auth/login
   GET    /auth/me
-  POST   /auth/send-verification-code   ← FREE_TIER_ENABLED gate; Twilio Lookup + IP rate limit + phone dedupe + SMS send
+  POST   /auth/send-verification-code   ← FREE_TIER_ENABLED gate; Twilio Lookup + IP rate limit + per-phone rate limit (3/24h, Block 7) + phone dedupe + SMS send
   POST   /auth/verify-phone             ← FREE_TIER_ENABLED gate; validates OTP, returns verification_token (consumed by /auth/signup-free-tier)
   POST   /auth/resend-verification-code ← FREE_TIER_ENABLED gate; 60s cooldown, max 3 resends per code
 
@@ -936,6 +936,18 @@ ClickUp is the live source of truth — this list is point-in-time.
 ---
 
 ## Decision log
+
+### 2026-05-09 (Block 7 — Phone-Verification UX Hardening)
+
+Closes ClickUp `86ahc02dc` (wrong-phone OTPs sent to strangers) and `86ahc027p` (generic 401 with no recovery path on signup).
+
+**Per-phone rate limit (`app/phone_rate_limit.py`):** mirrors `app/ip_rate_limit.py` exactly — midnight-UTC reset, counter on `app.state.phone_rate_limit`, key is SHA-256 phone_hash (not raw E.164). Limit: 3 sends per phone per 24-hour window, matching the existing 3-resend cap. Fires after per-IP check, before Twilio Lookup. Raises 429 with actionable message when exceeded.
+
+**Three distinct 401 error strings in `/auth/signup-free-tier`:** replaced the single generic `"Invalid or expired verification token"` with: `"Verification token not recognized."` (token_not_found), `"Verification token has expired. Please request a new code."` (expired), `"This verification code was sent to a different phone number. Please use the same number you entered when requesting the code."` (phone_mismatch). `log.warning(path=...)` diagnostics added alongside each (these were absent from the handler before this block). All three remain HTTP 401.
+
+**Tests:** 3 new tests in `tests/test_signup_free_tier_errors.py` assert the exact detail strings for all three 401 paths. Kept in a separate file from `tests/test_signup_free_tier.py` because the existing file covers status-code contracts and regression guards — adding detail-string asserts there would require touching AC3/AC4 in ways that muddy regression history. New file's scope: "Block 7 error-string contract." 50/50 tests passing.
+
+**Code:** commit `a296efc` on `origin/main`. `FREE_TIER_ENABLED` remains false; no production behavior change.
 
 ### 2026-05-09 (Block 6 — Free Tier Cleanup & Realignment)
 
