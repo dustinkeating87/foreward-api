@@ -1,6 +1,6 @@
 # Good Lie Golf — Architecture & Decision Log
 
-**Last verified:** 2026-05-09 (Block 7 — phone-verification UX hardening: per-phone rate limit, distinct 401 error strings, 50/50 tests)
+**Last verified:** 2026-05-09 (Block 8 — frontend aligned with PRODUCT_FREE_TIER.md; Signup hero copy, Dashboard CTAs, Subscribe routing, AuthProvider login, AlertHistory free-tier gate)
 **Maintained by:** Claude sessions, in collaboration with Dustin
 **Read this file at the start of any Good Lie Golf work.** It is the source of truth for how the app is built. ClickUp space `Good Lie Golf` (id `901313780791`) is the source of truth for *open work*. Both must be checked. If you make architectural decisions or learn schema details during a session, update this file before ending the session.
 
@@ -131,7 +131,7 @@ No grays. No pure black. No additional colors beyond these six.
 ### Layout
 Vertical band stack: four full-width white (`#FFFFFF`) horizontal bands stacked vertically, separated by transparent gaps where the topo illustration page background shows through. Bands share equal `min-height` for visual rhythm.
 
-- **Band 1 (Hero):** "Try one alert, free for 14 days" / "No credit card. One alert per phone number."
+- **Band 1 (Hero):** "Try Good Lie, free" / "No credit card. One alert per phone number." (updated Block 8 — previous copy "Try one alert, free for 14 days" was a Block 3 leftover; 14-day window does not exist in the simplified free-tier model)
 - **Band 2 (Step 01):** Phone verification — mobile number + OTP send/verify
 - **Band 3 (Step 02):** Account creation — email + password — RENDERED ONLY AFTER phone verification succeeds (not display:none, not rendered at all in the DOM until verify-phone returns 200)
 - **Band 4 (Footer):** "Already have an account? Sign in" + fine-print pricing line ("Paid plan ($9.99/mo) unlocks unlimited alerts after your first one fires.")
@@ -520,9 +520,9 @@ On each heartbeat:
 | `/auth?mode=signup` | Free-tier signup flow (phone verification → account creation). Rebuilt 2026-05-08, replaces the previous paid Stripe-redirect flow at this same URL. |
 | `/auth?mode=signin` | Sign-in flow. Untouched as of 2026-05-08. |
 | `/signup` | Orphaned route from a 2026-05-08 Lovable iteration. Currently redirecting / no-op. Cleanup deferred — does not block launch. |
-| `/dashboard` | `status='active'` alerts only (filter via `?status=active`) |
+| `/dashboard` | Fetches `status=active,fired,expired` (Block 8 fix-up — active-only fetch left free-tier state CTAs dead). Renders three states for non-paid users: fresh (no `free_tier_used_at`), post-fire subscribe CTA → `/subscribe?from=fired`, expired-without-firing grace-retry CTA → `/alerts/new`. |
 | `/alerts/new`, `/alerts/{id}/edit` | Alert criteria CRUD |
-| `/alerts/history` | `status='fired'` and `status='expired'` alerts; status badges; "Try again" / "Edit dates" buttons |
+| `/alerts/history` | `status='fired'` and `status='expired'` alerts; status badges; "Try again" / "Edit dates" buttons for paid users. Free-tier users on fired alerts see subscribe CTA → `/subscribe?from=fired` instead of "Try again" (Block 8). |
 | `/billing` | Stripe Checkout redirect |
 | `/admin` | Internal dashboard — needs `noindex` meta tag (queued, ClickUp `86ah69ypk`) |
 | `/courses/request` | Submit a missing-course request |
@@ -882,7 +882,9 @@ Worker (foreward-scraper)
 
 25. **Block 5b prod-side AC verification deferred.** The new free-tier alert creation gate ladder (503 → 403 → 402 → 402 → 200 on `POST /alerts`, gated by `FREE_TIER_ENABLED`) is shipped (commits `a2b519a`, `6d4d9bd`) and unit-tested but not prod-verified end-to-end. Same pattern as Block 3 verification: requires real signup with a fresh phone number. Pre-launch checklist tickets (ClickUp `86ahbkx68`, `86ahbfptb`) track this. Block 9 cutover (flag flip) MUST NOT happen until this verification passes. Plan: walk a real user through full signup → verify-phone → POST /alerts loop on a fresh phone, work backwards from the failure point if anything breaks.
 
-27. **Free-tier API is aligned with PRODUCT_FREE_TIER.md as of 2026-05-09; Lovable frontend (course picker, dashboard CTA, grace-retry UX) is not yet aligned.** Frontend blocks are downstream of Block 6 and will be addressed in a separate Lovable pass before `FREE_TIER_ENABLED` is flipped to true.
+27. ~~Free-tier API is aligned with PRODUCT_FREE_TIER.md as of 2026-05-09; Lovable frontend (course picker, dashboard CTA, grace-retry UX) is not yet aligned.~~ ✓ closed 2026-05-09 (Block 8 — frontend aligned with PRODUCT_FREE_TIER.md via five Lovable prompts; see decision log).
+
+28. **Lovable's "Done" status is unreliable — logic can ship dead while Lovable claims the prompt is complete.** Caught in Block 8: Prompt #1 shipped Dashboard CTAs that were unreachable because `getAlerts()` was called without a status filter, returning only active alerts. Lovable's completion claim was accurate at the level of "code was written" but not at the level of "the feature works." Every Lovable prompt requires two independent checks before being marked done: (1) Chrome-connector live render check, and (2) repo-level grep of the post-publish `foreward` source. Neither alone is sufficient.
 
 ---
 
@@ -936,6 +938,32 @@ ClickUp is the live source of truth — this list is point-in-time.
 ---
 
 ## Decision log
+
+### 2026-05-09 (Block 8 — Frontend Alignment)
+
+Aligned the Lovable-managed React frontend (`dustinkeating87/foreward`) with the simplified free-tier model documented in `docs/PRODUCT_FREE_TIER.md`. Closes ARCHITECTURE.md known issue #27.
+
+**Audit method:** Live page walk via Claude in Chrome connector (paid/beta paths only — non-paid paths require a free-tier test account, deferred to launch walkthrough); repo-level grep against the cloned foreward repo for deleted-endpoint references, dropped schema columns, and Block 3 lifecycle copy. Audit found that the courses-gate and renewal-ladder mechanics had not bled into the frontend (clean), but Block 3 copy and routing logic had.
+
+**Five Lovable prompts shipped (one with fix-up):**
+
+1. Dashboard post-fire subscribe CTA + grace-retry CTA + free-tier type updates (`api.ts` + `Dashboard.tsx`). Initial ship had a bug — `getAlerts()` called without status filter, returning only active alerts, leaving CTAs dead. Fix-up restored the intended behavior.
+2. Subscribe.tsx rewrite — removed all "trial" copy, added `?from=fired` query-param variant for post-fire context.
+3. AuthProvider.tsx login routing — simplified to always navigate to `/dashboard`. Free-tier users no longer get bounced to Stripe on login.
+4. AlertHistory.tsx — free-tier fired alerts show subscribe CTA instead of "Try again."
+5. Signup.tsx hero copy — "Try one alert, free for 14 days" → "Try Good Lie, free."
+
+**Verification approach:** Each prompt verified two ways before being marked done — Chrome-connector live render check (no regression on the founder's beta account) and repo-level grep of the post-publish foreward source. Lovable claiming "Done" is not sufficient; both checks are required.
+
+**Lovable failure mode caught:** Prompt #1 shipped dead because of an incorrect `getAlerts()` call. Repo-level verification caught it; live-render verification alone (which only tested the no-regression beta path) would have missed it. Going forward, every Lovable prompt requires both check types. Documented as known issue #28.
+
+**What remains pre-launch:**
+- Real-phone end-to-end walkthrough on `FREE_TIER_ENABLED=true` (gated on a fresh phone + temporary flag flip)
+- Copy refinement pass on Lovable-shipped strings (Subscribe headlines, Dashboard CTAs, Signup hero — all currently using Claude-default copy)
+- Backend `grace_retry_eligible` boolean exposure (Dashboard currently uses optimistic guess + 402 fallback)
+- Pre-launch ticket `86ahbkx68` re-scoping (the "≥5 paid alerts across ≥3 courses" check is partially obsolete now that the courses-gate is gone)
+
+**Canonical spec:** `docs/PRODUCT_FREE_TIER.md`. Anything that contradicts it is wrong.
 
 ### 2026-05-09 (Block 7 — Phone-Verification UX Hardening)
 
