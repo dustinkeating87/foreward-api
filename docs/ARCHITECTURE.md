@@ -35,7 +35,11 @@ The product has been renamed twice. References in older code still use earlier n
 
 The free tier is a guaranteed-successful demonstration of the product. New users sign up with phone+email, verify their phone, and get one free alert that behaves identically to a paid alert. After the alert fires, they receive one SMS + one email and are done — no retry, no second alert, no editing. The only path forward is a paid subscription. If the alert hits `date_to` without ever firing, the user gets exactly one grace retry. Phone and email are permanently locked to the account.
 
-Canonical spec: `docs/PRODUCT_FREE_TIER.md`. Any free-tier work must read that document first.
+**Implementation notes:**
+- `user_profiles.free_tier_used_at` is stamped at **first alert creation** (`alerts.py:99`), not at signup. Signup only writes `phone_verified`, `phone_hash`, and `notify_phone` to `user_profiles`. Any code that stamps `free_tier_used_at` at account-creation time is wrong.
+- Phone uniqueness is enforced at signup time via `ix_user_profiles_phone_hash_unique` (unique partial index on `user_profiles(phone_hash) WHERE phone_hash IS NOT NULL`). This index locks a phone to exactly one account from the moment the phone is verified — independent of whether the user has created their free alert yet. The earlier `ix_user_profiles_phone_hash_free_tier` (partial on `WHERE free_tier_used_at IS NOT NULL`) was replaced on 2026-05-09 because it allowed phone reuse before the first alert was created.
+
+Canonical spec: `docs/PRODUCT_FREE_TIER.md`. Any work touching free-tier code paths (`is_free_tier`, `free_tier_used_at`, `FREE_TIER_ENABLED`, signup-free-tier endpoint, alert creation gate) must read that document before making changes.
 
 ---
 
@@ -339,6 +343,7 @@ Committed migrations:
 - `20260506_add_phone_verification_codes.sql` — Block 2; committed, not yet applied to prod (Dustin applies via SQL Editor)
 - `20260508_add_captcha_balance_alarm_state.sql` — applied 2026-05-08, commit `29f0e3a` (3 new columns on `scraper_health` for 2Captcha balance auto-alert)
 - `20260509_simplify_free_tier.sql` — Block 6 cleanup, applied 2026-05-09; drops Block 3 lifecycle columns (5 columns from `alert_profiles` and `user_profiles`), drops `ix_alert_profiles_polling_expires_at_free_tier` index, adds `user_profiles.free_tier_grace_retry_used_at`
+- `20260509_phone_hash_unique_on_signup.sql` — applied 2026-05-09; drops `ix_user_profiles_phone_hash_free_tier` (partial WHERE `free_tier_used_at IS NOT NULL`), creates `ix_user_profiles_phone_hash_unique` (unique partial WHERE `phone_hash IS NOT NULL`). Decouples phone-reuse prevention from free-tier consumption — phone is now locked at signup, independent of alert creation state.
 
 `supabase_migrations.schema_migrations` table still does not exist; using the directory as the registry rather than the Supabase CLI's tracking system. Acceptable for this scale.
 
@@ -708,22 +713,24 @@ Abandoned-checkout:  Stripe Customer object created on checkout-start but no sub
 
 ## Live state (Supabase, captured 2026-05-03 afternoon)
 
+> **Stale as of 2026-05-09.** The 2026-05-09 Block 9 session ran a full free-tier walkthrough — test user `dustinkeating87+test2@gmail.com` was created and cleaned up post-walkthrough. Row counts below are the 2026-05-03 baseline; query Supabase directly for current figures before relying on this table. The alert and sent_slots counts have grown as the system has been firing production alerts since 2026-05-03.
+
 | Metric | Value | Notes |
 |---|---|---|
-| Auth users | 21 | (was 33 in morning; 14 orphans deleted, 2 new signups today) |
-| `user_profiles` rows | 21 | Now matches auth.users — orphan gap closed |
-| `alert_profiles` total | 16 | (was 17; one orphan deleted with its owner) |
-| `alert_profiles` `status='active'` | 2 | |
-| `alert_profiles` `status='fired'` | **7** | **Up from 0 this morning — alert lifecycle code firing in production** |
-| `alert_profiles` `status='expired'` | 7 | |
-| `alert_profiles` `status='paused'` | 0 | |
-| `sent_slots` total | 122 | (was 126; 4 orphan rows deleted) |
-| `sent_slots` with `user_id` | 61 | |
+| Auth users | 21 | 2026-05-03 baseline — stale |
+| `user_profiles` rows | 21 | 2026-05-03 baseline — stale |
+| `alert_profiles` total | 16 | 2026-05-03 baseline — stale |
+| `alert_profiles` `status='active'` | 2 | stale |
+| `alert_profiles` `status='fired'` | **7** | stale — count has grown since 2026-05-03 |
+| `alert_profiles` `status='expired'` | 7 | stale |
+| `alert_profiles` `status='paused'` | 0 | stale |
+| `sent_slots` total | 122 | stale — count has grown since 2026-05-03 |
+| `sent_slots` with `user_id` | 61 | stale |
 | `sent_slots` orphan (`user_id IS NULL`) | 61 | Pre-launch test alerts; harmless. Optional cleanup deferred. |
-| Stripe-subscribed users | 2 | |
-| Stripe-customer-only (abandoned) | 2 | |
-| `invite_codes` total | 60 | |
-| 2Captcha balance | $18.72 | ~18 days runway at current burn ($1/day). Top up before $10. |
+| Stripe-subscribed users | 2 | stale |
+| Stripe-customer-only (abandoned) | 2 | stale |
+| `invite_codes` total | 60 | stale |
+| 2Captcha balance | $18.72 | 2026-05-03 baseline — stale; check 2captcha.com for current balance |
 
 ---
 
@@ -880,11 +887,15 @@ Worker (foreward-scraper)
 
 26. **Lovable summaries unreliable for verification.** Lovable's response summaries can claim work shipped when it didn't (e.g., 2026-05-08 noindex on `/admin` claimed 'already there, kept' — was actually missing from rendered DOM, required follow-up prompt). Always verify Lovable changes via Inspect → Elements → Cmd+F search in rendered DOM, OR by view-source on rendered page after publish + hard-refresh. Never trust the summary message alone. Lovable's optimism on completion ≠ actual deployment state.
 
-25. **Block 5b prod-side AC verification deferred.** The new free-tier alert creation gate ladder (503 → 403 → 402 → 402 → 200 on `POST /alerts`, gated by `FREE_TIER_ENABLED`) is shipped (commits `a2b519a`, `6d4d9bd`) and unit-tested but not prod-verified end-to-end. Same pattern as Block 3 verification: requires real signup with a fresh phone number. Pre-launch checklist tickets (ClickUp `86ahbkx68`, `86ahbfptb`) track this. Block 9 cutover (flag flip) MUST NOT happen until this verification passes. Plan: walk a real user through full signup → verify-phone → POST /alerts loop on a fresh phone, work backwards from the failure point if anything breaks.
+25. ~~Block 5b prod-side AC verification deferred.~~ ✓ closed 2026-05-09 (Block 9 walkthrough) — full end-to-end verified on test account `dustinkeating87+test2@gmail.com`: signup → phone verify → `POST /alerts` 201 → scraper fired SMS + email → second alert correctly 402'd. Three blockers found and fixed during walkthrough; see Block 9 decision log entry. `FREE_TIER_ENABLED=true` on Railway after walkthrough confirmed clean.
 
 27. ~~Free-tier API is aligned with PRODUCT_FREE_TIER.md as of 2026-05-09; Lovable frontend (course picker, dashboard CTA, grace-retry UX) is not yet aligned.~~ ✓ closed 2026-05-09 (Block 8 — frontend aligned with PRODUCT_FREE_TIER.md via five Lovable prompts; see decision log).
 
 28. **Lovable's "Done" status is unreliable — logic can ship dead while Lovable claims the prompt is complete.** Caught in Block 8: Prompt #1 shipped Dashboard CTAs that were unreachable because `getAlerts()` was called without a status filter, returning only active alerts. Lovable's completion claim was accurate at the level of "code was written" but not at the level of "the feature works." Every Lovable prompt requires two independent checks before being marked done: (1) Chrome-connector live render check, and (2) repo-level grep of the post-publish `foreward` source. Neither alone is sufficient.
+
+29. **Regression watch — Lovable may regenerate `App.tsx` route definitions and re-introduce `requireSubscription` on `/dashboard`, `/alerts/new`, `/alerts/history`.** Caught and fixed in Block 9 (commit `2c74354`). If it recurs, free-tier users silently lose access to those three routes (bounced to `/account`). When invoking Lovable on the `foreward` repo for any page work, explicitly instruct it not to modify route definitions in `App.tsx`. After any Lovable session touching `App.tsx`, grep for `requireSubscription` on those three routes before marking done.
+
+30. **`sent_slots.tee_time` was null on the 2026-05-09 free-tier alert fire** (sent_slot id 855, course Dentonia Park). Per schema, this column should be populated by the scraper at insert time — it is used to render "Available as of HH:MM" in the SMS body. Either the scraper isn't writing it for this platform/course, or it's written then nulled. Investigate before launch since a null `tee_time` causes silent SMS body degradation (time context missing from the alert). Check `tee_sniper.py` scanned_at / tee_time write paths.
 
 ---
 
@@ -924,20 +935,42 @@ ClickUp is the live source of truth — this list is point-in-time.
 - 🔵 `86ah7atdw` — Public activity ticker — backend done; Lovable phase shipped 2026-05-03 morning
 - ⚪ `86ah69ypk` — Add `noindex` meta tag on `/admin` route — Lovable prompt queued
 - 🟠 `86ahc05ry` — Lovable: build `/subscribe` redirect route for email CTAs (depends on Lovable; CTAs in Block 4a templates point here)
+- ✅ `86ahbkwf6` — Lovable signup wall — closed by Block 8 (free-tier signup flow shipped; paid signup wall removed at site entry)
+- 🔵 `86ahbkx68` — Pre-launch checklist item: flag flip + real-phone E2E walkthrough — **partially obsolete** after Block 6 dropped courses-coverage gate; review and re-scope before closing
+- 🔵 `86ahbkwka` — Pre-launch checklist item — **review for obsolescence** after Block 6; may be partially or fully superseded
+- 🔵 `86ahazcce`, `86ahazcww`, `86ahazdv1` — Lovable Block 5/6/7 preview-only tickets — **likely superseded** by Block 8 shipping; review for closure
+- 🔴 (no ID yet) — `sent_slots.tee_time` null on 2026-05-09 fire (id 855, Dentonia Park) — investigate before launch (see known issue #30)
+- 🔵 (no ID yet) — Lovable copy/UX prompt for free-tier: fix "Payment required" static label on Dashboard, add returning-user CTA when `free_tier_used_at` is set but no active alert — shipped 2026-05-09; verify and close
 
 **Marketing & Launch**
 - 🟠 `86ah69yrf` — Instagram content kit for `@playgoodlie`
 - 🔵 `86ah69ytx` — OG image upgrade
 - ⚪ `86ah69yw6` — Meta reclaim attempt for `@goodliegolf`
 - ⚪ `86ah8ag8y` — Enable Stripe abandoned-checkout recovery emails
-- 🔵 `86ahc027p` — Bug: /auth/signup-free-tier returns identical 401 for three distinct failure modes (subtask of master `86ahavm5n`)
-- 🔵 `86ahc02dc` — Bug: /auth/send-verification-code has no phone-ownership check (subtask of master `86ahavm5n`)
+- ✅ `86ahc027p` — Bug: /auth/signup-free-tier returns identical 401 for three distinct failure modes — closed Block 7 (three distinct error strings shipped, commit `a296efc`)
+- ✅ `86ahc02dc` — Bug: /auth/send-verification-code has no phone-ownership check — closed Block 7 (per-phone rate limit shipped, commit `a296efc`)
 
 🔴 urgent · 🟠 high · 🔵 normal · ⚪ low
 
 ---
 
 ## Decision log
+
+### 2026-05-09 (Block 9 — Free-tier launch walkthrough + three blocker fixes)
+
+End-to-end walkthrough of the free-tier flow against the new product spec from `docs/PRODUCT_FREE_TIER.md`. Walkthrough surfaced three production-blocking bugs, all fixed in this session:
+
+1. **`requireSubscription` route guards on free-tier routes (foreward, commit `2c74354`).** `/dashboard`, `/alerts/new`, and `/alerts/history` all had `requireSubscription` guards in `App.tsx` route definitions. Free-tier users (`is_active=false`, `is_beta=false` by design) were being bounced to `/account`, making the entire free-tier UI unreachable. Fix: removed `requireSubscription` from those three routes; left auth gate intact. `/account` and `/admin` retain their existing protection. Note: this gap was not caught in Block 8 — the AuthProvider routing fix in Block 8 addressed the post-signin redirect target but did not remove the subscription gate at the route definition level. The two layers are separate: AuthProvider controls where a signed-in user navigates; `App.tsx` route guards control whether a route is reachable at all.
+
+2. **Premature `free_tier_used_at` stamp at signup (foreward-api, commit `2f62bf2`).** The `/auth/signup-free-tier` handler was stamping `user_profiles.free_tier_used_at` at account creation. This made the first-free-alert branch in `alerts.py:79` (which requires `free_tier_used_at IS NULL`) unreachable for any signed-up user — every freshly signed-up free-tier user got 402 on `POST /alerts`. Fix: removed the stamp from `auth.py`. The legitimate stamp at `alerts.py:99` (set on first alert insert) is unchanged.
+
+3. **Phone-uniqueness index condition (migration `20260509_phone_hash_unique_on_signup.sql`).** The previous index `ix_user_profiles_phone_hash_free_tier` was partial `WHERE free_tier_used_at IS NOT NULL`, coupling phone-reuse prevention to the free-tier stamp. Removing the signup stamp (fix 2 above) would have opened a phone-reuse window between signup and first-alert creation. Fix: replaced with `ix_user_profiles_phone_hash_unique`, partial `WHERE phone_hash IS NOT NULL`. Phone is now locked to account at signup (when `phone_hash` is written), independent of free-tier state, matching `PRODUCT_FREE_TIER.md`: "phone and email are permanently locked to that account, neither can be reused for another free-tier signup, ever."
+
+Walkthrough verified end-to-end on test account `dustinkeating87+test2@gmail.com` after all three fixes shipped: signup → phone verify → `/dashboard` reachable → `POST /alerts` 201 with `is_free_tier=true` → real scraper match fired SMS + email within minutes → second alert attempt correctly 402'd. Test user cleaned up post-walkthrough.
+
+**Fact established this session:** external `git push` to `dustinkeating87/foreward` main DOES trigger Lovable's deploy pipeline. Previously uncertain. Bundle hash on goodlie.golf changed from `index-B2hBf-Wc.js` (Block 8) to `index-BsxcqL5M.js` (this session) without any Lovable AI activity, confirming Lovable's hosting auto-deploys any push to main regardless of source.
+
+**Pre-launch state at session end:** `FREE_TIER_ENABLED=true` on Railway `web` service. Walkthrough success means the flag can remain enabled for soft launch, contingent on Lovable copy/UX improvements (separate prompt — addresses "Payment required" static label and adds "you've used your alert" CTA on returning-user dashboard).
 
 ### 2026-05-09 (Block 8 — Frontend Alignment)
 
@@ -1216,7 +1249,7 @@ ClickUp `86ahaza0k` closed.
 
 ### 2026-05-06 (Block 1 — free-tier schema foundation)
 
-Migration `20260506_add_free_tier_columns.sql` applied to prod via Supabase SQL Editor, committed to `foreward-api/supabase/migrations/`. Adds 5 columns to `alert_profiles` (`is_free_tier`, `polling_expires_at`, `renewals_used`, `final_expired_at`, `expiry_state` with CHECK constraint) and 4 columns to `user_profiles` (`phone_verified`, `phone_hash`, `free_tier_used_at`, `final_expired_at`). Two partial indexes: `ix_user_profiles_phone_hash_free_tier` (unique on `phone_hash WHERE free_tier_used_at IS NOT NULL`) and `ix_alert_profiles_polling_expires_at_free_tier` (btree on `polling_expires_at WHERE is_free_tier = true AND expiry_state IS NULL`). `FREE_TIER_ENABLED=false` added to Railway `web` service — all free-tier branches gated on this flag; no behavior change in production until Block 9 flips it to true. No existing paid alerts affected (all new columns null/default). ClickUp `86ahaz9e0` closed. ARCHITECTURE.md moved into `foreward-api/docs/` and committed — previously unversioned and stored in Cowork only. Doc drift from 2026-05-03→2026-05-06 (2Captcha balance auto-alert, ClickUp/doc reconciliation, By-request picker confirmation, alert form defaults patches) tracked in ticket 86ahb0m91.
+Migration `20260506_add_free_tier_columns.sql` applied to prod via Supabase SQL Editor, committed to `foreward-api/supabase/migrations/`. Adds 5 columns to `alert_profiles` (`is_free_tier`, `polling_expires_at`, `renewals_used`, `final_expired_at`, `expiry_state` with CHECK constraint) and 4 columns to `user_profiles` (`phone_verified`, `phone_hash`, `free_tier_used_at`, `final_expired_at`). Two partial indexes: `ix_user_profiles_phone_hash_free_tier` (unique on `phone_hash WHERE free_tier_used_at IS NOT NULL` — **superseded 2026-05-09** by `ix_user_profiles_phone_hash_unique` WHERE `phone_hash IS NOT NULL`; see migration `20260509_phone_hash_unique_on_signup.sql`) and `ix_alert_profiles_polling_expires_at_free_tier` (btree on `polling_expires_at WHERE is_free_tier = true AND expiry_state IS NULL` — **dropped 2026-05-09** by `20260509_simplify_free_tier.sql`). `FREE_TIER_ENABLED=false` added to Railway `web` service — all free-tier branches gated on this flag; no behavior change in production until Block 9 flips it to true. No existing paid alerts affected (all new columns null/default). ClickUp `86ahaz9e0` closed. ARCHITECTURE.md moved into `foreward-api/docs/` and committed — previously unversioned and stored in Cowork only. Doc drift from 2026-05-03→2026-05-06 (2Captcha balance auto-alert, ClickUp/doc reconciliation, By-request picker confirmation, alert form defaults patches) tracked in ticket 86ahb0m91.
 
 ### 2026-05-03 (afternoon — backups, alerts, CI, cleanup session)
 
