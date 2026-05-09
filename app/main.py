@@ -21,6 +21,7 @@ log = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app):
     app.state.ip_rate_limit = {}
+    app.state.phone_rate_limit = {}
     heartbeat_task = asyncio.create_task(heartbeat_monitor_loop())
     try:
         yield

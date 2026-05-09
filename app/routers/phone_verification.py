@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from app.config import settings
 from app.database import supabase_admin
 from app.ip_rate_limit import check_ip_rate_limit
+from app.phone_rate_limit import check_phone_rate_limit
 from app.twilio_lookup import LookupBlocked, check_phone
 from app.util.phone import hash_phone, is_valid_e164
 # Python 3.9 compat: see app/util/dates.py
@@ -73,6 +74,8 @@ def send_verification_code(body: SendCodeRequest, request: Request):
     check_ip_rate_limit(request)
 
     phone_hash = hash_phone(body.phone)
+
+    check_phone_rate_limit(request, phone_hash)
 
     # Twilio Lookup — block VoIP/disposable. Errors swallowed: Lookup outage should not break signup.
     try:
