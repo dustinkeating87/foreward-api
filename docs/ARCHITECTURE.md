@@ -1,6 +1,6 @@
 # Good Lie Golf — Architecture & Decision Log
 
-**Last verified:** 2026-05-09 (Block 8 — frontend aligned with PRODUCT_FREE_TIER.md; Signup hero copy, Dashboard CTAs, Subscribe routing, AuthProvider login, AlertHistory free-tier gate)
+**Last verified:** 2026-05-11 (Block 9 close: launch verification, aesthetic pass shipped, free_tier_expiry_loop doc-drift correction)
 **Maintained by:** Claude sessions, in collaboration with Dustin
 **Read this file at the start of any Good Lie Golf work.** It is the source of truth for how the app is built. ClickUp space `Good Lie Golf` (id `901313780791`) is the source of truth for *open work*. Both must be checked. If you make architectural decisions or learn schema details during a session, update this file before ending the session.
 
@@ -897,6 +897,27 @@ Worker (foreward-scraper)
 
 30. **`sent_slots.tee_time` was null on the 2026-05-09 free-tier alert fire** (sent_slot id 855, course Dentonia Park). Per schema, this column should be populated by the scraper at insert time — it is used to render "Available as of HH:MM" in the SMS body. Either the scraper isn't writing it for this platform/course, or it's written then nulled. Investigate before launch since a null `tee_time` causes silent SMS body degradation (time context missing from the alert). Check `tee_sniper.py` scanned_at / tee_time write paths.
 
+31. **Orphan SendGrid templates + Railway env vars.** Three SendGrid Dynamic
+Templates (`d-f53c968e8bb645a0ba98844549b2d2f1`, `d-bfbc0e264a2e4092ab236e6c594f7611`,
+`d-af240773d6ec40899f6c20ae9c685dcf`) and three corresponding Railway env
+vars (`SENDGRID_TEMPLATE_FREE_TIER_EXPIRY_1/2/3` on spirited-youthfulness web
+service) are dead code paths. No current code reads them; Block 6 deprecated
+the renewals mechanic they were meant to drive. Safe to delete post-launch.
+Low priority hygiene.
+
+32. **`app/free_tier_expiry_loop.py` was never built.** Block 3 decision log
+entry (2026-05-07) and working-rules session header reference this file as
+if it exists and runs in production. It has never been in git. Block 6
+deprecated the mechanic. Any future session reading the Block 3 entry should
+treat the loop as a never-shipped plan. See 2026-05-11 decision log entry
+for full explanation.
+
+33. **Design brief drift on typography and wordmark.** good-lie-design-brief.md
+§5 mandates New York display serif for hero headline and wordmark; §14.3
+leaves wordmark treatment open. Current Lovable implementation uses sans for
+both, confirmed acceptable by Dustin 2026-05-11. Brief should be amended
+before next design pass to prevent re-litigating.
+
 ---
 
 ## Outstanding ClickUp tasks (snapshot 2026-05-03 afternoon)
@@ -955,6 +976,92 @@ ClickUp is the live source of truth — this list is point-in-time.
 ---
 
 ## Decision log
+
+### 2026-05-11 (launch verification + aesthetic pass + doc corrections)
+
+Pre-ad-launch verification session. No code changes to foreward-api or
+foreward-scraper this session. All work was: (a) verification against
+production state, (b) ClickUp cleanup, (c) aesthetic pass on Lovable
+frontend, (d) doc corrections in this file.
+
+**Launch readiness verified:**
+- Incognito sanity pass on goodlie.golf clean end-to-end (homepage, signup
+  entry point routing to free-tier flow not Stripe, /dashboard, /alerts/new,
+  /alerts/history, /account, /admin)
+- Stripe checkout end-to-end conversion path validated via two existing
+  paying subscribers (no fresh test transaction needed — webhook → is_active
+  flip already exercised in production)
+- PROXY_URLS env var on resourceful-delight/worker confirmed present with 20
+  proxies. ClickUp 86ah69y6d closeable. Note: legacy singular PROXY_URL also
+  still set; cleanup deferred (worker code reads PROXY_URLS, harmless)
+- FREE_TIER_ENABLED=true on spirited-youthfulness/web service (set during
+  Block 9 walkthrough Saturday); free tier live
+
+**SendGrid renewals templates diagnosis (closes 86ahbkw2n as N/A):**
+The original ticket asked to fix "2 renewals remaining" copy in free-tier
+expiry templates. Investigation revealed:
+- `git log --all --oneline -- app/free_tier_expiry_loop.py` returns no
+  history — the file has never been committed to main
+- `grep -rn "SENDGRID_TEMPLATE_FREE_TIER_EXPIRY" app/ tests/` returns no
+  matches — no current code reads these env vars
+- The three SENDGRID_TEMPLATE_FREE_TIER_EXPIRY_1/2/3 env vars on Railway web
+  service and their corresponding SendGrid Dynamic Templates are orphans
+- Block 6 (Saturday 2026-05-09) removed the entire renewals/coupon mechanic;
+  PRODUCT_FREE_TIER.md (canonical) explicitly forbids renewals, polling
+  windows, and Stripe coupons
+Conclusion: the stale-copy concern resolves itself because no code path
+triggers those templates. Closed 86ahbkw2n with this explanation. Filed
+post-launch cleanup ticket (low priority) to delete the orphan templates and
+env vars.
+
+**`app/free_tier_expiry_loop.py` doc-drift correction:**
+The 2026-05-07 Block 3 decision log entry below describes an "in-process
+free_tier_expiry_loop (5 min cadence, polling-window based, transitions
+expiry_state, sends emails, generates Stripe coupons)" as if it were running
+in production. The working-rules session header also references the file
+path as a common fetch target. Both descriptions are wrong: the file was
+never committed and Block 6 deprecated the entire mechanic it would have
+driven. The Block 3 entry below is left in place for historical accuracy
+but readers should treat any reference to free_tier_expiry_loop.py as
+describing a never-shipped plan, not live code. PRODUCT_FREE_TIER.md is
+the authoritative spec for current free-tier behavior.
+
+**Aesthetic pass shipped to Lovable (homepage + /alerts/new):**
+Brief-compliance pass against good-lie-design-brief.md §3, §4, §9. Changes:
+- Primary CTAs (Get Your Free Alert, Create alert): Fairway (#2D3B2A) fill
+  with bone (#F2EDE4) text, per brief §9 primary button spec
+- Sign In secondary button: transparent background, --fairway border, --fairway
+  text (matches primary color family, contrasts via fill-vs-outline)
+- Header bar: Fairway-inverted strip (was previously transparent/bone), bone
+  text and nav, matches the Fairway footer added same session — brackets the
+  page top and bottom in dark green
+- Footer: minimal Fairway-inverted strip with "© 2026 GOOD LIE" in JetBrains
+  Mono, --type-mono-s, uppercase, 0.08em tracking (replaces previous "© 2026
+  Good Lie" sans line on bone)
+- Hero headline "Never miss a tee time.": 78px / weight 700 / line-height 1.05,
+  single-line on desktop
+- How It Works step titles (Set your alert / We monitor / Notify): 32px /
+  weight 700 / line-height 1.2
+- Utility chassis topo background removed from /alerts/new, /alerts/history,
+  /dashboard, /account, /admin per brief §8.3 ("never in utility chassis")
+- /alerts/new form card: --bone background, 1px --pencil at 20% opacity
+  border, 4px radius, 32px internal padding (per brief §9 component spec).
+  Restored mid-session after Lovable regression removed the card wrapper
+- Courses We Monitor section vertical padding matched to How It Works for
+  visual rhythm
+- "Greater Toronto Area · 13 courses" pill: collapsed by default (no behavior
+  change, attempted "bolder" treatment did not land cleanly)
+Hero topo illustration NOT modified (per brief §8: Lovable cannot produce
+the required precision; real Lakeview topo SVG to be sourced externally,
+post-launch).
+
+**Design brief drift (resolve before next design pass):**
+- §5 (typography): brief mandates New York display serif for hero headline
+  and wordmark. Current implementation uses sans (Inter or similar) for both.
+  Decision this session: keep current sans treatment, amend brief.
+- §14.3 (wordmark decision): brief left open; this session confirmed sans
+  wordmark stays. Brief should be updated to reflect.
+Both pending Dustin's brief revision; not blocking launch.
 
 ### 2026-05-09 (Block 9 — Free-tier launch walkthrough + three blocker fixes)
 
