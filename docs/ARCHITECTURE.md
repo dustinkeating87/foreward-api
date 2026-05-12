@@ -1,6 +1,6 @@
 # Good Lie Golf — Architecture & Decision Log
 
-**Last verified:** 2026-05-12 (5 new admin endpoints — /admin/users, /admin/alerts, /admin/recent-fires, /admin/course-demand, /admin/course-requests)
+**Last verified:** 2026-05-12 (Block 11 — app/util/courses.py restored; /admin/course-demand fired_alerts_30d fixed)
 **Maintained by:** Claude sessions, in collaboration with Dustin
 **Read this file at the start of any Good Lie Golf work.** It is the source of truth for how the app is built. ClickUp space `Good Lie Golf` (id `901313780791`) is the source of truth for *open work*. Both must be checked. If you make architectural decisions or learn schema details during a session, update this file before ending the session.
 
@@ -378,8 +378,12 @@ foreward-api/
 │   ├── email.py                ← NEW 2026-05-03 — SendGrid wrapper for ops alerts
 │   ├── main.py
 │   ├── schemas.py
+│   ├── util/
+│   │   ├── courses.py          ← canonical course key → display name mapping (22 GolfNow + Chronogolf courses); used by /admin/course-demand
+│   │   ├── dates.py            ← _parse_iso() — Python 3.9 fromisoformat compat
+│   │   └── phone.py            ← SHA-256 phone hashing, E.164 validation
 │   └── routers/
-│       ├── admin.py            ← /admin/dashboard, /admin/scraper-health, /scraper-heartbeat (now with alarm logic)
+│       ├── admin.py            ← /admin/dashboard + 5 new data endpoints (users, alerts, recent-fires, course-demand, course-requests)
 │       ├── alerts.py           ← /alerts CRUD, /alerts/history, /alerts/{id}/retry, /activity
 │       ├── auth.py             ← /auth/signup, /auth/login, /auth/me
 │       ├── billing.py          ← /create-checkout-session, /webhooks/stripe
@@ -888,7 +892,7 @@ Worker (foreward-scraper)
 
 23. **Free-tier first_name fallback is hardcoded to "there"** in expiry email templates. `user_profiles` has no first_name column. Acceptable for launch since most users won't notice "Hey there," in a transactional email. Worth fixing once free-tier flows have real user data.
 
-24. **`COURSE_DISPLAY_NAMES` dict in `app/util/courses.py` is hardcoded** and won't reflect upstream renames automatically. Scraper fetches canonical names from external APIs at runtime (`sent_slots.course_name`); the dict is for email/SMS copy where no `sent_slots` row exists yet. Reconcile against scraper's runtime names ~quarterly.
+24. **`app/util/courses.py` mapping lives in TWO places — scraper and API.** The COURSES dict in `app/util/courses.py` duplicates the `display_name` fields in `GOLFNOW_COURSES` (golfnow_scraper.py) and `CHRONOGOLF_COURSES` (chronogolf_scraper.py). Keeping them in sync is manual discipline. If a scraper display name drifts, `fired_alerts_30d` in `/admin/course-demand` will silently return 0 for that course. Reconcile ~quarterly or whenever a course is added/renamed. Long-term fix: move to a shared Supabase `courses` table. GTG courses are NOT in the dict — their names come from the GTG gateway API at runtime and fall through to the raw key.
 
 26. **Lovable summaries unreliable for verification.** Lovable's response summaries can claim work shipped when it didn't (e.g., 2026-05-08 noindex on `/admin` claimed 'already there, kept' — was actually missing from rendered DOM, required follow-up prompt). Always verify Lovable changes via Inspect → Elements → Cmd+F search in rendered DOM, OR by view-source on rendered page after publish + hard-refresh. Never trust the summary message alone. Lovable's optimism on completion ≠ actual deployment state.
 
@@ -982,6 +986,18 @@ ClickUp is the live source of truth — this list is point-in-time.
 
 ## Decision log
 
+### 2026-05-12 (Block 11 — canonical course mapping restored)
+
+Restored `app/util/courses.py` (deleted in Block 6 alongside the expiry loop). The original file was recovered from `git show 64ef4b8 -- app/util/courses.py`. New version has the same 22-course coverage (GolfNow + Chronogolf) but different API shape: `display_name(key)`, `course_platform(key)`, `all_keys()`, `all_courses()`. Display names use en-dashes (–) to match the scraper's `display_name` fields exactly, ensuring `sent_slots.course_name` joins work.
+
+**Root cause of `fired_alerts_30d = 0`:** The Block 10 `/admin/course-demand` endpoint keyed `fired_alerts_30d` by the lowercase course key (e.g. `"lakeview"`) but `sent_slots.course_name` stores the scraper's display name (e.g. `"Lakeview Golf Course"`). These strings never matched. Fix: use `course_display_name(key).lower()` as the lookup key.
+
+**GTG courses:** Not in the mapping. The GTG scraper captures `CourseName` directly from the GTG gateway API at runtime (it doesn't have a static `COURSES` dict like GolfNow/Chronogolf). GTG course names seen in production include "Dentonia Park" (sent_slot id 855, 2026-05-09) and "Humber Valley" (2026-05-08 false-alarm incident). For GTG courses in `/admin/course-demand`, `course_name` returns the raw key and `platform` returns None. `fired_alerts_30d` will match if `sent_slots.course_name.lower()` happens to equal the alert profile key.
+
+**lionhead-masters included despite `active=False`:** Included for completeness in case any alert_profiles rows reference this key. The scraper won't poll it but users may have created alerts against it historically.
+
+Commit: `09e5ced`
+
 ### 2026-05-12 (admin dashboard data expansion — 5 new endpoints)
 
 Added five GET endpoints under `/admin/` to support an admin dashboard rebuild (frontend work separate). All use `Depends(require_admin)` (JWT + admin email check) — same auth as existing `/admin/dashboard`. No schema changes; all queries hit existing tables.
@@ -1000,7 +1016,7 @@ Added five GET endpoints under `/admin/` to support an admin dashboard rebuild (
 - `user_profiles.final_expired_at` and `alert_profiles.final_expired_at`, `polling_expires_at`, `renewals_used`, `expiry_state` were dropped in Block 6 (2026-05-09) and do not exist in the live DB. Omitted from all responses. The spec's "Expired" status badge (defined as `final_expired_at IS NOT NULL`) was adapted to `free_tier_grace_retry_used_at IS NOT NULL AND NOT is_active` — this captures the same user state (exhausted both free alert and grace retry without converting) using the live schema.
 
 **Course key → display name gap (`/admin/course-demand`):**
-No `app/util/courses.py` or `COURSE_DISPLAY_NAMES` dict exists in the codebase. `alert_profiles.courses` stores lowercase keys (e.g. `lakeview`, `braeben`); `sent_slots.course_name` stores scraper display names. The `fired_alerts_30d` count in `/admin/course-demand` uses a case-insensitive match on these two representations — accuracy depends on whether the scraper's display name matches the lowercase key. `course_name` in the response returns the raw key. A proper mapping should be added in a future block.
+~~No `app/util/courses.py` existed at the time of this block.~~ **Resolved in Block 11 (2026-05-12):** `app/util/courses.py` restored with 22 courses (GolfNow + Chronogolf). `/admin/course-demand` now returns proper display names and uses the display name for the `fired_alerts_30d` join. See Block 11 decision log entry.
 
 ### 2026-05-11 (launch verification + aesthetic pass + doc corrections)
 
