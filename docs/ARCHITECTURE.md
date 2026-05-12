@@ -1,6 +1,6 @@
 # Good Lie Golf — Architecture & Decision Log
 
-**Last verified:** 2026-05-11 (Block 9 close: launch verification, aesthetic pass shipped, free_tier_expiry_loop doc-drift correction)
+**Last verified:** 2026-05-12 (5 new admin endpoints — /admin/users, /admin/alerts, /admin/recent-fires, /admin/course-demand, /admin/course-requests)
 **Maintained by:** Claude sessions, in collaboration with Dustin
 **Read this file at the start of any Good Lie Golf work.** It is the source of truth for how the app is built. ClickUp space `Good Lie Golf` (id `901313780791`) is the source of truth for *open work*. Both must be checked. If you make architectural decisions or learn schema details during a session, update this file before ending the session.
 
@@ -770,6 +770,11 @@ Admin
   POST   /scraper-heartbeat          ← worker → API health ping; ALSO checks alarm thresholds and emails on transitions
   GET    /admin/scraper-health
   GET    /admin/dashboard
+  GET    /admin/users                ← paginated users; status badges computed server-side; alert counts + SMS totals pre-aggregated; ?limit=&offset=&status=&search=
+  GET    /admin/alerts               ← paginated alerts with user_email joined; ?limit=&offset=&status=&tier=free|paid&course=&user_id=&search=
+  GET    /admin/recent-fires         ← recent sent_slots rows with user_email; ?limit= (max 200) &since=ISO datetime; default last 7 days
+  GET    /admin/course-demand        ← active alerts aggregated by course key; includes fired_alerts_30d and unique_users per course
+  GET    /admin/course-requests      ← course_requests aggregated by course name (case-insensitive); includes request_count, requester_emails (capped 10)
 
 Worker (foreward-scraper)
   GET    /healthz                    ← HTTP healthcheck on aiohttp server; reads in-process timestamp; returns starting/healthy/stale
@@ -976,6 +981,26 @@ ClickUp is the live source of truth — this list is point-in-time.
 ---
 
 ## Decision log
+
+### 2026-05-12 (admin dashboard data expansion — 5 new endpoints)
+
+Added five GET endpoints under `/admin/` to support an admin dashboard rebuild (frontend work separate). All use `Depends(require_admin)` (JWT + admin email check) — same auth as existing `/admin/dashboard`. No schema changes; all queries hit existing tables.
+
+**Endpoints added:**
+
+- `GET /admin/users` — paginated user list. Status badge computed server-side from `user_profiles` fields; alert counts pivoted by status; SMS total from `sent_slots`; `last_activity_at = max(notify_updated_at, MAX(alert updated_at))`. Filters: `?status=` (comma-sep badge names), `?search=` (email partial match). Default `limit=50`, max 200.
+- `GET /admin/alerts` — paginated alerts with `user_email` joined. Filters: `?status=`, `?tier=free|paid`, `?course=`, `?user_id=`, `?search=`. Sorted `updated_at DESC`.
+- `GET /admin/recent-fires` — `sent_slots` rows with `user_email` resolved. `?since=` ISO datetime bound (default: last 7 days). Max 200 rows. No cache (unlike `/activity`).
+- `GET /admin/course-demand` — active alerts unnested by course key with 30d fire count and unique active-alert user count. Sorted `active_alerts DESC`.
+- `GET /admin/course-requests` — `course_requests` aggregated by `LOWER(course_name)`. Includes `request_count`, `first_requested_at`, `last_requested_at`, `requester_emails` (capped at 10 per course). Sorted `request_count DESC`, then `last_requested_at DESC`.
+
+**Query strategy:** Supabase Python client ORM + Python-side aggregation. No N+1: each endpoint makes 2–3 targeted queries regardless of row count. PostgREST embedded selects were not used — `sent_slots.alert_id` and `sent_slots.user_id` have no FK constraints, and `alert_profiles.user_id → auth.users(id)` (not `public.user_profiles`) makes cross-table embedding unreliable. Pattern matches existing admin.py style.
+
+**Schema deviations from block spec:**
+- `user_profiles.final_expired_at` and `alert_profiles.final_expired_at`, `polling_expires_at`, `renewals_used`, `expiry_state` were dropped in Block 6 (2026-05-09) and do not exist in the live DB. Omitted from all responses. The spec's "Expired" status badge (defined as `final_expired_at IS NOT NULL`) was adapted to `free_tier_grace_retry_used_at IS NOT NULL AND NOT is_active` — this captures the same user state (exhausted both free alert and grace retry without converting) using the live schema.
+
+**Course key → display name gap (`/admin/course-demand`):**
+No `app/util/courses.py` or `COURSE_DISPLAY_NAMES` dict exists in the codebase. `alert_profiles.courses` stores lowercase keys (e.g. `lakeview`, `braeben`); `sent_slots.course_name` stores scraper display names. The `fired_alerts_30d` count in `/admin/course-demand` uses a case-insensitive match on these two representations — accuracy depends on whether the scraper's display name matches the lowercase key. `course_name` in the response returns the raw key. A proper mapping should be added in a future block.
 
 ### 2026-05-11 (launch verification + aesthetic pass + doc corrections)
 
