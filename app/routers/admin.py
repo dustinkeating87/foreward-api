@@ -6,6 +6,7 @@ from app.config import settings
 from app.email import send_email
 from app.captcha_balance import maybe_check_and_alert
 from app.util.dates import _parse_iso
+from app.util.courses import display_name as course_display_name, course_platform
 from collections import Counter
 from datetime import datetime, timezone, timedelta
 import httpx
@@ -521,7 +522,7 @@ def admin_course_demand(current_user=Depends(require_admin)):
             if uid:
                 course_users.setdefault(key, set()).add(uid)
 
-    # sent_slots.course_name is the scraper display name; keyed lowercase for best-effort match
+    # sent_slots.course_name is the scraper display name; match against display_name() output
     fires_30d: dict = {}
     for row in fires_result.data or []:
         name = (row.get("course_name") or "").lower()
@@ -532,9 +533,10 @@ def admin_course_demand(current_user=Depends(require_admin)):
         [
             {
                 "course_key": key,
-                "course_name": key,  # no mapping table — raw key returned; see closeout note
+                "course_name": course_display_name(key),
+                "platform": course_platform(key),
                 "active_alerts": course_alerts[key],
-                "fired_alerts_30d": fires_30d.get(key.lower(), 0),
+                "fired_alerts_30d": fires_30d.get(course_display_name(key).lower(), 0),
                 "unique_users": len(course_users.get(key, set())),
             }
             for key in course_alerts
