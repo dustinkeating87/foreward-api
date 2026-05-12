@@ -878,7 +878,11 @@ Worker (foreward-scraper)
 14. **Backups not yet end-to-end tested.** First quarterly restore test due 2026-08-03 (ClickUp `86ah8bnjk`). Until then, treat backups as unverified.
 15. **GitHub PAT lacks `workflow` scope** — workflow file edits must use GitHub web UI until PAT is updated.
 16. **Railway "Wait for CI" toggle off** on both services. CI is advisory until enabled. Both workflows passing reliably as of 2026-05-03.
-17. ~~GolfNow returning 0 slots persistently~~ ✓ **resolved 2026-05-03 PM, verified in production.** Was a false alarm. Root cause: the alert-driven filtering optimization (scrapers only fetch courses with at least one active user alert) makes platforms return 0 slots when no active alerts target their courses. The `consecutive_zero_polls` counter didn't distinguish "scraped → got 0" from "didn't scrape". Fundamentally incompatible with natural alert lifecycle churn. **Fix shipped (commit `bc527e3`):** `poll_golfnow_tee_times` and `poll_chronogolf_tee_times` return `None` instead of `[]` when short-circuiting; two call sites in `tee_sniper.py` detect `None` and reset the counter to 0 instead of incrementing. Real failures (HTTP 403, timeouts, exceptions inside `fetch_one`, captcha exhaustion) still return a list (possibly `[]`) and increment normally. Verified post-deploy: GolfNow 0/0, Chronogolf 0/0, dashboard Healthy. **Lesson learned:** the silent-failure alert system did its job — it surfaced a real measurement problem, just not the one we initially thought. The morning's 11:57 AM "test" alarm was likely also a false positive on the same root cause.
+17. ~~GolfNow returning 0 slots persistently~~ ✓ **resolved 2026-05-03 PM (first variant) and 2026-05-12 (second variant), both verified in production.**
+
+   **First variant (2026-05-03):** False alarm. Root cause: alert-driven filtering short-circuit — platforms returned 0 slots when no active alerts targeted their courses. The `consecutive_zero_polls` counter didn't distinguish "scraped → got 0" from "didn't scrape". Fix (`bc527e3`): `poll_golfnow_tee_times` and `poll_chronogolf_tee_times` return `None` when short-circuiting; call sites detect `None` and reset the counter instead of incrementing. Verified post-deploy: GolfNow 0/0, Chronogolf 0/0, dashboard Healthy.
+
+   **Second variant (2026-05-12):** Even after `bc527e3`, HTTP 200 with legitimately empty inventory (no tee times for the searched date/player combination) still returned `[]` from `fetch_one`, indistinguishable from HTTP 403/timeout/exception failures. Worker logs confirmed GolfNow returning HTTP 200 every poll but `consecutive_zero_polls.golfnow` climbing to 95+. Fix (2026-05-12): three-state return contract — `None` (no alert work), `(True, slots)` (request reached the platform — even if empty), `(False, slots)` (request failed). Counter resets on `True`, increments only on `False`. `fetch_one` on GolfNow/Chronogolf returns `(True, [])` on HTTP 200 + empty result, `(False, [])` on non-200/timeout/exception. `poll_tee_times` (GTG) tracks `got_gateway_response` flag — set `True` when the GTG gateway API returns a 200 matching response. Navigation failures (`page.goto` timeout/crash) now caught inside `poll_tee_times` and returned as `(False, [])`, bringing them into the alarm system. All GTG Playwright/Turnstile/search/gateway-timeout failures already returned `[]` and were already incrementing the counter; now correctly typed as `(False, [])`. Extends the silent-failure monitoring established to close known issue #9.
 
 18. ~~Admin dashboard hardcodes platform cards~~ ✓ closed 2026-05-08 — admin platform cards now data-driven from `scraper_health.slots_last_poll` jsonb keys. Currently renders 3 cards (gtg, golfnow, chronogolf). EZLinks no longer surfaces. Verified live on goodlie.golf/admin.
 
@@ -926,6 +930,8 @@ for full explanation.
 leaves wordmark treatment open. Current Lovable implementation uses sans for
 both, confirmed acceptable by Dustin 2026-05-11. Brief should be amended
 before next design pass to prevent re-litigating.
+
+34. **Transient `ConnectionTerminated` (HTTP/2) on `GET /admin/alerts` at 2026-05-12T20:07:15Z.** Single occurrence, self-recovered, no user impact. Flag if recurrent — may indicate Railway proxy or upstream httpx HTTP/2 framing issue under load.
 
 ---
 
@@ -985,6 +991,28 @@ ClickUp is the live source of truth — this list is point-in-time.
 ---
 
 ## Decision log
+
+### 2026-05-12 (consecutive_zero_polls false-alarm fix — tuple-based platform success contract)
+
+**Problem:** `consecutive_zero_polls` incremented on any poll returning 0 slots, regardless of whether the request actually failed. GolfNow returning HTTP 200 + empty inventory (correct scrape, no bookings available for the searched date/players) was indistinguishable from a 403 or timeout — both returned `[]` from `fetch_one`. Counter climbed to 95+ on a healthy GolfNow poll cycle; alarms fired falsely.
+
+**Root cause confirmed across all three platforms:** GolfNow and Chronogolf `fetch_one` returned `[]` for both success-empty and all failure modes. GTG `poll_tee_times` returned `[]` for all failure modes swallowed internally (Turnstile failure, search button failure, gateway timeout) — none of these propagated as exceptions to distinguish them from zero-inventory results.
+
+**Fix — three-state return contract:**
+- `None` — no alert work this poll (sentinel, unchanged from `bc527e3`)
+- `(True, slots)` — platform was reached and responded, even if empty
+- `(False, slots)` — request failed (non-200, timeout, exception, or navigation failure)
+
+Counter rule: reset on `None` (no work) or `True` (reached platform); increment only on `False` (failed).
+
+**Changes shipped:**
+- `golfnow_scraper.py` — `fetch_one` returns `(bool, list)`; `poll_golfnow_tee_times` aggregates `had_success = any(ok for ok, _ in results)`, returns `(had_success, all_slots)`.
+- `chronogolf_scraper.py` — same pattern. `course not open` early-exit returns `(True, [])` — not a failure.
+- `tee_sniper.py` `poll_tee_times` — added `got_gateway_response` flag (set `True` in `on_response` callback when GTG gateway returns HTTP 200). Added `except Exception` to outer try/finally (Option A) — navigation failures now return `(False, [])` instead of propagating. Return type changed to `tuple[bool, list[dict]] | None`.
+- `tee_sniper.py` call sites — all three platforms unpack `(success, slots)`; `gtg_count` now uses `len(gtg_slots)` directly instead of subtraction from `raw`. `gtg_slots_only = raw[:gtg_count]` replaced with `gtg_slots`.
+- Counter loop — `platform_success` dict; condition changed from `count > 0` to `platform_success[platform]`.
+
+**Secondary effect (GTG):** Turnstile failures, search button failures, and gateway timeouts were previously swallowed inside `poll_tee_times` and returned `[]`, which incremented the counter identically to zero-inventory. Now correctly typed `(False, [])` — alarm system treats them as failures. Navigation failures (previously propagated to loop-restart, bypassing counter entirely) are now caught and return `(False, [])`. This brings all GTG failure modes into the alarm system. Extends the silent-failure monitoring established to close known issue #9 (2Captcha balance auto-alert, 2026-05-08).
 
 ### 2026-05-12 (Block 11 — canonical course mapping restored)
 
