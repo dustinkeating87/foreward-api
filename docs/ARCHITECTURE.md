@@ -992,6 +992,16 @@ ClickUp is the live source of truth — this list is point-in-time.
 
 ## Decision log
 
+### 2026-05-13 (GolfNow SPA discovery — Playwright for Ontario course enumeration)
+
+**Discovery:** GolfNow Ontario city directory pages (`/course-directory/ca/on/<city>`) are 100% client-side rendered (Vue SSR with Angular/Vue hydration). Raw HTML from `requests.get()` contains only the placeholder `~facilityid~` — no real facility IDs are present in the static response. The province index page (`/course-directory/ca/on`) IS static HTML and continues to use `requests`.
+
+**Fix:** `scripts/enumerate_ontario_courses.py` replaces per-city HTTP fetch + regex with a single Playwright Chromium browser: `playwright_stealth` to reduce bot detection, `wait_until="domcontentloaded"` (not `networkidle` — GolfNow's background analytics polling never lets the page reach networkidle), then `wait_for_selector('a[href*="/tee-times/facility/"]', timeout=10s)` to confirm hydration, then `page.evaluate()` JS DOM traversal to extract facility links and names. Browser crash recovery up to 3 restarts; 1.5s sleep between 232 cities.
+
+**Result (2026-05-13 run):** 229 GolfNow + 524 Chronogolf = **753 total Ontario facilities** enumerated. Zero-facility city rate: 49% (114/232 cities) — expected for small towns, well under 80% sanity-guard threshold.
+
+**Why this matters:** These 753 facilities form the candidate pool for the GTA-area scraper. The `flag` field marks known indoor sims, driving ranges, and Shotgun Golf venues for manual review before adding to the active scraper registry.
+
 ### 2026-05-12 (consecutive_zero_polls false-alarm fix — tuple-based platform success contract)
 
 **Problem:** `consecutive_zero_polls` incremented on any poll returning 0 slots, regardless of whether the request actually failed. GolfNow returning HTTP 200 + empty inventory (correct scrape, no bookings available for the searched date/players) was indistinguishable from a 403 or timeout — both returned `[]` from `fetch_one`. Counter climbed to 95+ on a healthy GolfNow poll cycle; alarms fired falsely.
