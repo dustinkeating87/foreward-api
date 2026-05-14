@@ -992,6 +992,25 @@ ClickUp is the live source of truth — this list is point-in-time.
 
 ## Decision log
 
+### 2026-05-13 (Batch 1 GTA course expansion — 126 new scraper entries shipped)
+
+**What shipped:** 43 GolfNow + 81 Chronogolf = **126 new scraper entries** added to `golfnow_scraper.py` and `chronogolf_scraper.py` (and to `foreward-api/app/util/courses.py`). All entries are GTA-region only (Batch 1).
+
+**Scraper totals after Batch 1:** GOLFNOW_COURSES: 55 entries. CHRONOGOLF_COURSES: 91 entries. COURSES dict: 146 entries.
+
+**Source:** `foreward-scraper/docs/scrape_targets/ontario_batch1_to_add.json` (133 unique GTA facilities after dedup). Multi-course clubs expand to multiple scraper entries (e.g., Cardinal Golf Complex → 4 courses, Westview → 3).
+
+**Drops and resolutions vs raw batch1 list:**
+- 4 GolfNow entries dropped (already scraped via Chronogolf): Lionhead, Lakeridge Links, Silver Lakes — Chronogolf preferred
+- 9 GolfNow non-course venues dropped (TopTracer ranges, TopGolf, GolfzonNorth, KStadium, Speedy Golf, Golf Wing, iRange) — slipped through triage keyword heuristic
+- 1 GolfNow redundant entry dropped (Westview 27-Holes, covered by 3 Chronogolf courses)
+- 2 additional cross-platform duplicates resolved at commit time (St. Andrew's Valley, Angus Glen South) — Chronogolf kept
+- 5 Chronogolf clubs skipped entirely: Lebovic, Chedoke, King's Forest, Vic Hadfield (empty `/courses` endpoint), Westview "DO NOT USE" stub
+
+**Chronogolf affiliation_type_id:** 5285 (confirmed visitor default) applied to all new entries. Per-course IDs require DevTools verification for any that return empty.
+
+**Batch 2 (Ontario-near + Ontario-far, ~565 facilities) pending** — deferred until Batch 1 verifies live across a full poll cycle.
+
 ### 2026-05-13 (GolfNow SPA discovery — Playwright for Ontario course enumeration)
 
 **Discovery:** GolfNow Ontario city directory pages (`/course-directory/ca/on/<city>`) are 100% client-side rendered (Vue SSR with Angular/Vue hydration). Raw HTML from `requests.get()` contains only the placeholder `~facilityid~` — no real facility IDs are present in the static response. The province index page (`/course-directory/ca/on`) IS static HTML and continues to use `requests`.
