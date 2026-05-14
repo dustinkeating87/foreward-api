@@ -803,7 +803,7 @@ Worker (foreward-scraper)
 - Service: `worker` (id `42260d63-2677-4d6b-90bd-8ea67fc8dacb`)
 - Region: EU West (Amsterdam)
 - Builder: Dockerfile
-- 17 service env vars: `GTG_EMAIL`, `GTG_PASSWORD`, `CAPTCHA_API_KEY`, `ALERTS_API_URL`, `ALERTS_API_KEY`, `GTG_ACCOUNT`, `POLL_INTERVAL_SECONDS`, `PROXY_URL`, `PROXY_URLS`, `SENDGRID_API_KEY`, `SMTP_*`, `TWILIO_*`
+- 15 service env vars: `GTG_ACCOUNTS`, `CAPTCHA_API_KEY`, `ALERTS_API_URL`, `ALERTS_API_KEY`, `POLL_INTERVAL_SECONDS`, `PROXY_URL`, `PROXY_URLS`, `SENDGRID_API_KEY`, `SMTP_*`, `TWILIO_*` (removed `GTG_EMAIL`, `GTG_PASSWORD`, `GTG_ACCOUNT` 2026-05-14; renamed `GTG_ACCOUNT` → `GTG_ACCOUNTS`)
 
 ### Railway: `spirited-youthfulness` (web/API)
 - Project ID: `7c8fa4ed-d992-4f5d-a78b-907ed5fd4e44`
@@ -868,7 +868,7 @@ Worker (foreward-scraper)
 4. ~~Migration system not in use~~ ✓ closed 2026-05-03 (in use, 2 files committed).
 5. ~~No Supabase backups configured~~ ✓ closed 2026-05-03 afternoon (weekly local pg_dump → Google Drive).
 6. ~~No worker healthcheck endpoint — Railway can't auto-detect stuck-but-running worker~~ ✓ closed 2026-05-08 — `/healthz` endpoint shipped on foreward-scraper (commit `b2ea3ad`). aiohttp web server runs as background asyncio task; `mark_poll_completed()` updates in-process timestamp; handler reads timestamp without hitting the DB. Three states: starting (90s grace) / healthy (<180s since last poll) / stale (≥180s, returns 503). Railway healthcheck wired via `railway.json` `deploy.healthcheckPath`. Local testing passed all three states.
-7. **`GTG_ACCOUNT` (singular) on worker vs `GTG_ACCOUNTS` (plural) on API** — multi-account migration half-done.
+7. ~~**`GTG_ACCOUNT` (singular) on worker vs `GTG_ACCOUNTS` (plural) on API** — multi-account migration half-done.~~ ✓ closed 2026-05-14. See decision log.
 8. ~~README in `foreward-api` still says "Tee Sniper API"~~ ✓ closed 2026-05-08 — verified rebranded in commit `a6a9730`
 9. ~~2Captcha balance has no auto-monitoring — silent failure mode if balance hits zero~~ ✓ closed 2026-05-08 — balance auto-alert shipped on foreward-api (commit `29f0e3a`). Migration `20260508_add_captcha_balance_alarm_state.sql` applied to prod (3 new columns on `scraper_health`). Check fires every 15 min via `/scraper-heartbeat`. Alarm threshold $5 USD (configurable via `CAPTCHA_BALANCE_ALARM_THRESHOLD_USD`). Email alarm + recovery via existing `send_alarm_email` infra. `CAPTCHA_API_KEY` env var added to Railway `web` service. Verified live in prod 2026-05-08 — first check succeeded (balance $16.53, ~26 days runway at current ~$0.43/day burn rate).
 10. **Meta ad account trust issues** affecting parent operator's brands.
@@ -991,6 +991,25 @@ ClickUp is the live source of truth — this list is point-in-time.
 ---
 
 ## Decision log
+
+### 2026-05-14 (early — GTG auth outage + close-out)
+
+**Outage:** worker exited cleanly at 00:03:10 UTC on GTG initial login failure. Worker stayed dead ~30 min because Railway's ON_FAILURE policy doesn't restart on exit code 0. Active alert (out-of-window dates) was unaffected by the gap.
+
+**Root cause:** env var naming mismatch. Railway worker had `GTG_ACCOUNT` (singular) containing the burner account JSON, but `load_accounts()` reads `GTG_ACCOUNTS` (plural). Primary auth path returned empty, fell through to `GTG_EMAIL` / `GTG_PASSWORD` fallback — which pointed at `dustinkeating87@gmail.com` (not a registered GTG account). Worker attempted login, GTG rejected with "incorrect password," worker exited.
+
+**Why it was invisible until tonight:** the previous worker container had a valid session cookie from whenever it last cold-started successfully. As long as that session held, no re-authentication was needed. Batch 1 deploy triggered a fresh container which had to authenticate cold and exposed the latent bug.
+
+**Fixes shipped tonight (commit hashes follow):**
+1. Renamed Railway env var `GTG_ACCOUNT` → `GTG_ACCOUNTS` on `resourceful-delight` worker. Closes known issue #7.
+2. Deleted Railway env vars `GTG_EMAIL` and `GTG_PASSWORD` on worker. Misleading fallback removed; if `GTG_ACCOUNTS` is ever unset, worker now fails loudly instead of silently authenticating as wrong identity.
+3. Changed worker exit code on GTG login failure from 0 to 1. Railway's `ON_FAILURE` policy now auto-restarts the worker, surfacing the issue via repeat-failure logs rather than silent death.
+
+**Deferred (separate ClickUp tasks):**
+- Decouple GTG init from worker startup (architectural change — let GolfNow/Chronogolf polling continue when GTG fails). Today's outage took down all three platforms because GTG init is a startup prerequisite. New task created.
+- Create 2-3 backup GTG accounts (ClickUp `86ah69yf1`). Today's outage demonstrates the cost of single-account dependency on a captcha-required platform.
+
+**Meta-lesson:** known issue #7 was documented on 2026-05-03 and deferred for 11 days. It cost ~30 min of worker downtime tonight. Half-done migrations in the "known issues" list should be treated as live risks, not parking lots. Audit the rest of that list for similar shape.
 
 ### 2026-05-13 (Batch 1 GTA course expansion — 126 new scraper entries shipped)
 
