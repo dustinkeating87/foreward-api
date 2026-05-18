@@ -1,6 +1,6 @@
 # Good Lie Golf — Architecture & Decision Log
 
-**Last verified:** 2026-05-12 (Block 11 — app/util/courses.py restored; /admin/course-demand fired_alerts_30d fixed)
+**Last verified:** 2026-05-18 (Pricing pivot — free tier replaces 7-day trial)
 **Maintained by:** Claude sessions, in collaboration with Dustin
 **Read this file at the start of any Good Lie Golf work.** It is the source of truth for how the app is built. ClickUp space `Good Lie Golf` (id `901313780791`) is the source of truth for *open work*. Both must be checked. If you make architectural decisions or learn schema details during a session, update this file before ending the session.
 
@@ -14,7 +14,7 @@ Raw scavenged data lives in `./scavenge-raw/` next to this file. Re-run scavenge
 
 **Positioning:** the ethical, golfer-friendly alternative to private auto-booking bots.
 
-**Pricing:** Free-tier first. New users get one free alert on signup with no credit card; paywall presented after the alert fires. Paid tier: $9.99 CAD/month. There is no 7-day trial.
+**Pricing:** Free tier (one alert per user/phone, lifetime) → $9.99 CAD/mo paid for everything after. No upfront trial, no credit card to start.
 **Domain:** https://goodlie.golf
 **Instagram:** @playgoodlie (active, secured Apr 25, 2026). @goodliegolf is squatted; reclaim attempt is parallel low-priority.
 
@@ -182,7 +182,7 @@ Extends `auth.users` 1:1 via `handle_new_user` trigger.
 | notify_email | text | YES | — | preferred notification email (overrides auth email) |
 | notify_phone | text | YES | — | E.164 phone |
 | notify_updated_at | timestamptz | YES | — | when notification prefs last changed |
-| trial_end | timestamptz | YES | — | 7-day free trial expiry |
+| trial_end | timestamptz | YES | — | LEGACY — 7-day trial model retired 2026-05-18. Column kept for existing rows; new signups should not have this set. Pivot to free-alert model. |
 | phone_verified | boolean | NO | false | Set true on successful 6-digit verification at free-tier signup |
 | free_tier_used_at | timestamptz | YES | — | Block 1 (2026-05-07) — set when user first uses free tier; lifetime once-only |
 | phone_hash | text | YES | — | Block 2 — SHA-256 hexdigest of E.164 phone (no salt); used for uniqueness check |
@@ -210,6 +210,8 @@ Per-user saved alert criteria.
 | status | text | NO | 'active' | CHECK in (active, fired, expired, paused) |
 | created_at | timestamptz | YES | now() | |
 | updated_at | timestamptz | YES | now() | |
+**NOTE 2026-05-18:** The 14-day polling window + 2-renewal model these columns supported has been retired. New free-tier model is: one alert per user/phone, runs until first successful fire OR date_to expiry (whichever first). On successful fire → hard paywall for alert #2. On date_to expiry without fire → free re-attempt allowed. `polling_expires_at`, `renewals_used`, `expiry_state`, `final_expired_at` may be vestigial — verify before any code that reads them is touched. `is_free_tier` still used to tag the alert.
+
 | is_free_tier | boolean | YES | false | Block 1 (2026-05-07) — true if alert was created under free-tier rules |
 
 **Status semantics (one-shot model, locked 2026-05-03):**
@@ -673,7 +675,7 @@ Migration:  service-role-with-app-filter → anon-with-JWT-and-RLS (in progress;
 ### Stripe lifecycle
 
 ```
-Trial:      Set on signup (user_profiles.trial_end = now() + 7d), not on subscription start
+Trial:      RETIRED 2026-05-18. No upfront trial. Free tier (1 alert) replaces trial as the value-before-payment moment.
 Checkout:   POST /create-checkout-session → returns Stripe Checkout URL → user redirected
 Success:    Stripe → SUCCESS_URL → user lands back on goodlie.golf
 Cancel:     CANCEL_URL same pattern
@@ -857,6 +859,7 @@ Worker (foreward-scraper)
 | **Silent-failure alerts: API-side, transition-only** | **2026-05-03** | **No state column needed. Implicit comparison of prev/new. Failures swallowed — never break heartbeat.** |
 | **DB password is alphanumeric only** | **2026-05-03** | **Avoids URL-encoding issues across shells, scripts, and connection-string parsers.** |
 | "By request" picker pattern for non-GTA courses | 2026-05-05 | Founder-curated course additions surface in the alert picker's "By request" section only — not on the homepage. Homepage stays GTA-only. Pattern: founder-curated courses graduate to a proper named region at ~5-8 courses. First applied to Sandridge GC (Vero Beach FL, GolfNow platform) — Dunes facility 5223, Lakes facility 6798. |
+| **Pricing pivot: free tier replaces trial** | **2026-05-18** | **One free alert per user/phone, lifetime. Runs until first successful fire OR date_to expiry. Successful fire → hard paywall for alert #2. Date_to expiry without fire → free re-attempt. No 7-day credit-card trial. Block 4 (Stripe coupons + renewal emails) retired.** |
 
 ---
 
@@ -933,6 +936,8 @@ before next design pass to prevent re-litigating.
 
 34. **Transient `ConnectionTerminated` (HTTP/2) on `GET /admin/alerts` at 2026-05-12T20:07:15Z.** Single occurrence, self-recovered, no user impact. Flag if recurrent — may indicate Railway proxy or upstream httpx HTTP/2 framing issue under load.
 
+35. **Block 1–3 schema columns may be partially vestigial after 2026-05-18 pricing pivot.** `polling_expires_at`, `renewals_used`, `expiry_state`, `final_expired_at`, `final_expired_at` on user_profiles — verify which are still meaningful under the new one-alert free-tier model. Touch code paths in `free_tier_expiry_loop.py` carefully. Audit needed before next free-tier code change.
+
 ---
 
 ## Outstanding ClickUp tasks (snapshot 2026-05-03 afternoon)
@@ -991,6 +996,36 @@ ClickUp is the live source of truth — this list is point-in-time.
 ---
 
 ## Decision log
+
+### 2026-05-18 (Pricing pivot — free tier replaces 7-day trial)
+
+The 7-day free trial gated by credit card is retired. Replaced with a single-alert free tier:
+
+- One free alert per user / per phone, lifetime
+- Phone verification still required (Block 2 endpoints intact)
+- Runs until successful fire OR date_to expiry
+- Successful fire → hard paywall to create alert #2
+- Date_to expiry without fire → free re-attempt allowed (no penalty)
+- After paywall → $9.99 CAD/month, no further trial
+
+**Why:** Cold paid traffic was converting at 0.24% landing-page-to-signup with the credit-card-upfront trial. Funnel friction was killing ad spend ROI. Free-tier-with-paywall-after-success inverts the trust ask: value first, payment second.
+
+**Retired:**
+- 7-day trial model (`user_profiles.trial_end` is now legacy)
+- 14-day polling window for free alerts (`polling_expires_at`)
+- 2-renewal model (`renewals_used`, `expiry_state`)
+- Stripe coupons for renewals (Block 4 dead)
+- Renewal email templates (was Block 4a)
+
+**Verification needed (new ticket):**
+- Audit Block 1–3 code for references to retired columns. Tear out or leave inert?
+- Confirm `is_free_tier` is still the right tag for the new model
+- Verify `phone_hash` uniqueness index still does the right thing (one alert per phone)
+- Confirm Lovable signup flow can route to free-alert creation (was ticket 86ahbkwf6 — now urgent and reframed)
+
+**Pre-launch checklist replacement:** Old checklist (ticket 86ahbkx68) was 'verify ≥5 paid alerts before flipping FREE_TIER_ENABLED=true'. New checklist: 'verify free-alert path is reachable from Lovable signup, paywall fires on alert #2 attempt, ad traffic lands on free-alert flow not Stripe checkout.'
+
+**Impact on ad campaign:** Ad spend is paused on the new IG-targeted ad set until the free-tier funnel is reachable from goodlie.golf. Current funnel routes all visitors to Stripe checkout, which is the bug that surfaced via Meta pixel conversion data (1 signup from 422 PageViews over 4 days).
 
 ### 2026-05-14 (early — GTG auth outage + close-out)
 
