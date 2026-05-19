@@ -24,7 +24,7 @@ jobs:
 
       - name: Run refresh_state.py
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.STATE_UPDATE_TOKEN }}
         run: python3 scripts/refresh_state.py
 
       - name: Commit updated STATE.md

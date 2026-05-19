@@ -11,10 +11,10 @@
 <!-- AUTOGEN:headline_counts -->
 | Metric | Count |
 |--------|-------|
-| Courses in scraper code | 151 |
-| Active (on ALERTING_PLATFORMS, course enabled) | 150 |
+| Courses in scraper code | 135 |
+| Active (on ALERTING_PLATFORMS, course enabled) | 134 |
 | Exposed in frontend picker | 39 |
-| Active-platform gap (scraper active, not in picker) | 109 |
+| Active-platform gap (scraper active, not in picker) | 98 |
 <!-- /AUTOGEN:headline_counts -->
 
 ---
@@ -22,12 +22,12 @@
 ## Last Updated
 
 <!-- AUTOGEN:last_updated -->
-_Last refreshed: 2026-05-19 18:20:55 UTC_
+_Last refreshed: 2026-05-19 19:57:41 UTC_
 
 | Source | Commit |
 |--------|--------|
-| foreward-api | a313474c25f6568d5297d6a14dd3c2e58ce0a5fc |
-| foreward-scraper | 03e427539741360f0d2d9702f175e2f45bc8ee8c |
+| foreward-api | aed3ecc0012ea6975320a86e564a8f49391ef0bc |
+| foreward-scraper | 2ed75dad2b83d8901ef5b41c4aab2e7f7a81b82e |
 | foreward (frontend) | 380e0858af788b9131a5f66e37cd02d8165904cb |
 <!-- /AUTOGEN:last_updated -->
 
@@ -39,14 +39,14 @@ _Last refreshed: 2026-05-19 18:20:55 UTC_
 | Platform | Total | Active | Inactive |
 |----------|-------|--------|----------|
 | GolfNow | 55 | 55 | 0 |
-| Chronogolf | 90 | 89 | 1 |
+| Chronogolf | 74 | 73 | 1 |
 | GTG | 6 | 6 | — |
-| **Total** | **151** | **150** | **1** |
+| **Total** | **135** | **134** | **1** |
 By region:
 
 | Region | Count |
 |--------|-------|
-| GTA | 149 |
+| GTA | 133 |
 | By Request (FL) | 2 |
 <!-- /AUTOGEN:course_counts -->
 
@@ -120,11 +120,9 @@ By region:
 | Key | Name | Platform ID | Region | Active |
 |-----|------|-------------|--------|--------|
 | acton-golf-club | Acton Golf Club | 888 | GTA | yes |
-| angus-glen-golf-club-north-course | Angus Glen Golf Club – North Course | 1214 | GTA | yes |
 | angus-glen-golf-club-south-course | Angus Glen Golf Club – South Course | 1215 | GTA | yes |
 | ayren-links-golf-club | Ayren Links Golf Club | 1196 | GTA | yes |
 | ballantrae-golf-club | Ballantrae Golf Club | 1194 | GTA | yes |
-| banty-s-roost-golf-club | Banty’s Roost Golf Club | 27710 | GTA | yes |
 | bayview-golf-country-club | Bayview Golf & Country Club | 1212 | GTA | yes |
 | beacon-hall-golf-club | Beacon Hall Golf Club | 1189 | GTA | yes |
 | bowmanville-golf-country-club | Bowmanville Golf & Country Club | 1197 | GTA | yes |
@@ -135,10 +133,6 @@ By region:
 | burlington-springs-golf-club | Burlington Springs Golf Club | 1306 | GTA | yes |
 | bushwood | Bushwood Golf Club | 1524 | GTA | yes |
 | camisle-golf-club | Camisle Golf Club | 1307 | GTA | yes |
-| cardinal-golf-club-east-wing | Cardinal Golf Complex – East Wing | 1486 | GTA | yes |
-| cardinal-golf-club-kettle-creek | Cardinal Golf Complex – Kettle Creek | 1488 | GTA | yes |
-| cardinal-golf-club-redcrest | Cardinal Golf Complex – RedCrest | 1485 | GTA | yes |
-| cardinal-golf-club-west-wing | Cardinal Golf Complex – West Wing | 1487 | GTA | yes |
 | carlisle-golf-country-club-east | Carlisle Golf & Country Club – East | 1337 | GTA | yes |
 | carlisle-golf-country-club-north | Carlisle Golf & Country Club – North | 19814 | GTA | yes |
 | carlisle-golf-country-club-south | Carlisle Golf & Country Club – South | 1335 | GTA | yes |
@@ -149,12 +143,8 @@ By region:
 | centennial-park-golf-center-east-nine | Centennial Park Golf Center – East Nine | 1388 | GTA | yes |
 | centennial-park-golf-center-north-nine | Centennial Park Golf Center – North Nine | 1390 | GTA | yes |
 | centennial-park-golf-center-west-nine | Centennial Park Golf Center – West Nine | 1389 | GTA | yes |
-| dragon-s-fire-golf-club | Dragon's Fire Golf Club - DO NOT USE | 21698 | GTA | yes |
 | eldorado-golf-club | Eldorado Golf Club | 19697 | GTA | yes |
-| flemingdon-park-golf-course | Flemingdon Park Golf Course | 1363 | GTA | yes |
 | glen-eagle-golf-club | Glen Eagle Golf Club | 1288 | GTA | yes |
-| parkshore-golf-club | Goreway Golf Club | 1228 | GTA | yes |
-| harbor-view-golf-country-club | Harbor View Golf & Country Club | 1420 | GTA | yes |
 | highland-gate-golf-club-ontario--2 | Highland Gate Golf Club | 1261 | GTA | yes |
 | highland-gate-golf-club-ontario | Highland Gate Golf Club | 1187 | GTA | yes |
 | hornby-glen-golf-course | Hornby Glen Golf Course | 1457 | GTA | yes |
@@ -180,8 +170,6 @@ By region:
 | oak-gables-golf-club-learning-centre | Oak Gables Golf Club | 1475 | GTA | yes |
 | oshawa-golf-and-curling-club | Oshawa Golf Club | 23654 | GTA | yes |
 | pebblestone-golf-course | Pebblestone Golf Course | 1360 | GTA | yes |
-| peel-village-golf-course | Peel Village Golf Course | 1227 | GTA | yes |
-| pickering-glen-golf-club | Pickering Glen Golf Club | 23698 | GTA | yes |
 | pickering-golf-club | Pickering Golf Club | 19685 | GTA | yes |
 | quarry-lion-golf-resort | Quarry Lion Golf Resort | 23909 | GTA | yes |
 | richmond-hill-golf-club | Richmond Hill Golf Club | 1218 | GTA | yes |
@@ -192,7 +180,6 @@ By region:
 | royal-ontario-golf-club | Royal Ontario Golf Club | 1459 | GTA | yes |
 | silver-lakes | Silver Lakes Golf & Country Club | 22587 | GTA | yes |
 | sleepy-hollow-country-club-ontario | Sleepy Hollow Country Club | 27300 | GTA | yes |
-| south-ajax-golf-club | South Ajax Golf Club | 27715 | GTA | yes |
 | southbrook-golf-country-club | Southbrook Golf & Country Club | 1284 | GTA | yes |
 | st-andrews-valley-golf-club | St. Andrew's Valley Golf Club | 1188 | GTA | yes |
 | stonehenge-golf-club | Stonehenge Golf Club | 1198 | GTA | yes |
@@ -201,13 +188,10 @@ By region:
 | osprey-hoot | TPC Toronto at Osprey Valley – Hoot Course | 22978 | GTA | yes |
 | osprey-north | TPC Toronto at Osprey Valley – North Course | 22979 | GTA | yes |
 | the-deer-creek-academy | The Deer Creek Academy | 887 | GTA | yes |
-| turnberry-golf-club | Turnberry Golf Club | 1231 | GTA | yes |
-| tyandaga-municipal-golf-course | Tyandaga Municipal Golf Course | 1313 | GTA | yes |
 | westview-golf-club-ontario-aurora-homestead | Westview Golf Club – Homestead | 26718 | GTA | yes |
 | westview-golf-club-ontario-aurora-lakeland | Westview Golf Club – Lakeland | 26723 | GTA | yes |
 | westview-golf-club-ontario-aurora-middle | Westview Golf Club – Middle | 26719 | GTA | yes |
 | whispering-ridge | Whispering Ridge Golf Club | 1233 | GTA | yes |
-| winchester-golf-club-ontario-brooklyn | Winchester Golf Club | 19720 | GTA | yes |
 | wyldewood-golf-country-club | Wyldewood Golf & Country Club | 1458 | GTA | yes |
 
 ### GTG (City of Toronto)
@@ -234,7 +218,6 @@ By region:
 | chronogolf | acton-golf-club | Acton Golf Club |
 | chronogolf | ayren-links-golf-club | Ayren Links Golf Club |
 | golfnow | bantys-roost-golf-country-club | Banty's Roost Golf & Country Club |
-| chronogolf | banty-s-roost-golf-club | Banty’s Roost Golf Club |
 | chronogolf | bayview-golf-country-club | Bayview Golf & Country Club |
 | chronogolf | beacon-hall-golf-club | Beacon Hall Golf Club |
 | chronogolf | bowmanville-golf-country-club | Bowmanville Golf & Country Club |
@@ -246,10 +229,6 @@ By region:
 | chronogolf | bushwood | Bushwood Golf Club |
 | golfnow | caistorville-golf-club | Caistorville Golf Club |
 | chronogolf | camisle-golf-club | Camisle Golf Club |
-| chronogolf | cardinal-golf-club-east-wing | Cardinal Golf Complex – East Wing |
-| chronogolf | cardinal-golf-club-kettle-creek | Cardinal Golf Complex – Kettle Creek |
-| chronogolf | cardinal-golf-club-redcrest | Cardinal Golf Complex – RedCrest |
-| chronogolf | cardinal-golf-club-west-wing | Cardinal Golf Complex – West Wing |
 | chronogolf | carlisle-golf-country-club-east | Carlisle Golf & Country Club – East |
 | chronogolf | carlisle-golf-country-club-north | Carlisle Golf & Country Club – North |
 | chronogolf | carlisle-golf-country-club-south | Carlisle Golf & Country Club – South |
@@ -263,16 +242,13 @@ By region:
 | golfnow | cherry-downs | Cherry Downs |
 | golfnow | deerfield-golf-club-on | Deerfield Golf Club (ON) |
 | golfnow | dragons-fire-golf-club | Dragon's Fire Golf Club |
-| chronogolf | dragon-s-fire-golf-club | Dragon's Fire Golf Club - DO NOT USE |
 | golfnow | dunnys-divots | Dunny's Divots |
 | golfnow | east-wing-golf-course-cardinal-golf-club | East Wing Golf Course - Cardinal Golf Club |
 | chronogolf | eldorado-golf-club | Eldorado Golf Club |
-| chronogolf | flemingdon-park-golf-course | Flemingdon Park Golf Course |
 | golfnow | foxbridge-golf-course | Foxbridge Golf Course |
 | golfnow | glen-abbey-golf-club | Glen Abbey Golf Club |
 | chronogolf | glen-eagle-golf-club | Glen Eagle Golf Club |
 | golfnow | gull-river-golf-club | Gull River Golf Club |
-| chronogolf | harbor-view-golf-country-club | Harbor View Golf & Country Club |
 | golfnow | harbour-view-golf-country-club | Harbour View Golf & Country Club |
 | golfnow | harmony-creek-golf-centre | Harmony Creek Golf Centre |
 | golfnow | hidden-lake-new-course | Hidden Lake - New Course |
@@ -305,7 +281,7 @@ By region:
 | golfnow | oshawa-airport-golf-club | Oshawa Airport Golf Club |
 | chronogolf | oshawa-golf-and-curling-club | Oshawa Golf Club |
 | chronogolf | pebblestone-golf-course | Pebblestone Golf Course |
-| chronogolf | pickering-glen-golf-club | Pickering Glen Golf Club |
+| golfnow | pickering-glen | Pickering Glen Golf Club |
 | chronogolf | pickering-golf-club | Pickering Golf Club |
 | chronogolf | quarry-lion-golf-resort | Quarry Lion Golf Resort |
 | golfnow | redcrest-golf-course-cardinal-golf-club | RedCrest Golf Course - Cardinal Golf Club |
@@ -328,13 +304,12 @@ By region:
 | chronogolf | osprey-north | TPC Toronto at Osprey Valley – North Course |
 | golfnow | turnberry-golf-club-ontario | Turnberry Golf Club - Ontario |
 | golfnow | tyandaga-golf-course | Tyandaga Golf Course |
-| chronogolf | tyandaga-municipal-golf-course | Tyandaga Municipal Golf Course |
 | golfnow | west-wing-golf-course-cardinal-golf-club | West Wing Golf Course - Cardinal Golf Club |
 | chronogolf | westview-golf-club-ontario-aurora-homestead | Westview Golf Club – Homestead |
 | chronogolf | westview-golf-club-ontario-aurora-lakeland | Westview Golf Club – Lakeland |
 | chronogolf | westview-golf-club-ontario-aurora-middle | Westview Golf Club – Middle |
 | chronogolf | whispering-ridge | Whispering Ridge Golf Club |
-| chronogolf | winchester-golf-club-ontario-brooklyn | Winchester Golf Club |
+| golfnow | winchester | Winchester Golf Club |
 | golfnow | wooden-sticks-golf-club | Wooden Sticks Golf Club |
 | chronogolf | wyldewood-golf-country-club | Wyldewood Golf & Country Club |
 
@@ -346,7 +321,11 @@ By region:
 
 ### Frontend-only (in picker but not in scraper)
 
-_None — all frontend courses are tracked in the scraper._
+| Key | Label |
+|-----|-------|
+| Peel Village Golf Course | Peel Village Golf Course |
+| South Ajax Golf Club | South Ajax Golf Club |
+| Turnberry Golf Club | Turnberry Golf Club |
 <!-- /AUTOGEN:coverage_gaps -->
 
 ---
@@ -354,12 +333,7 @@ _None — all frontend courses are tracked in the scraper._
 ## Cross-Platform Duplicates
 
 <!-- AUTOGEN:cross_platform_duplicates -->
-| Name | Platforms | Keys | Active Platforms |
-|------|-----------|------|------------------|
-| Angus Glen Golf Club – North Course | chronogolf, golfnow | angus-glen-golf-club-north-course, angus-glen-north | chronogolf, golfnow |
-| Goreway Golf Club | chronogolf, golfnow | parkshore-golf-club, goreway-golf-club | chronogolf, golfnow |
-| Pickering Glen Golf Club | chronogolf, golfnow | pickering-glen-golf-club, pickering-glen | chronogolf, golfnow |
-| Winchester Golf Club | chronogolf, golfnow | winchester-golf-club-ontario-brooklyn, winchester | chronogolf, golfnow |
+_No cross-platform duplicates detected._
 <!-- /AUTOGEN:cross_platform_duplicates -->
 
 ---
