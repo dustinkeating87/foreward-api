@@ -15,9 +15,9 @@ import re
 import subprocess
 import sys
 import tempfile
+from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
 
 
 # ---------------------------------------------------------------------------
@@ -27,6 +27,7 @@ from typing import Optional
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
 STATE_MD = REPO_ROOT / "docs" / "STATE.md"
+ADMIN_PY = REPO_ROOT / "app" / "routers" / "admin.py"
 
 
 # ---------------------------------------------------------------------------
@@ -75,8 +76,8 @@ def get_self_sha() -> str:
 # ---------------------------------------------------------------------------
 
 
-def extract_course_list(source: str, varname: str) -> list[dict]:
-    """Extract a top-level list-of-dicts assignment from Python source via AST."""
+def extract_list_constant(source: str, varname: str) -> list:
+    """Extract a top-level list assignment from Python source via AST."""
     tree = ast.parse(source)
     for node in ast.walk(tree):
         if isinstance(node, ast.Assign):
@@ -94,18 +95,15 @@ def extract_course_list(source: str, varname: str) -> list[dict]:
 def extract_frontend_courses(ts_source: str) -> tuple[list[dict], list[dict]]:
     """
     Parse GTA_COURSES and BY_REQUEST_COURSES arrays from courses.ts.
-
-    Returns (gta_courses, by_request_courses) where each entry is
-    {"key": str, "label": str}.
+    Returns (gta_courses, by_request_courses) where each entry is {"key", "label"}.
     """
 
     def parse_array(array_name: str, source: str) -> list[dict]:
-        # Match the full array body between the outermost [ ... ]
         pattern = rf"export\s+const\s+{array_name}[^=]*=\s*\["
         m = re.search(pattern, source)
         if not m:
             return []
-        start = m.end() - 1  # position of opening [
+        start = m.end() - 1
         depth = 0
         end = start
         for i, ch in enumerate(source[start:], start):
@@ -117,19 +115,10 @@ def extract_frontend_courses(ts_source: str) -> tuple[list[dict], list[dict]]:
                     end = i
                     break
         array_body = source[start : end + 1]
+        entry_re = re.compile(r'\{\s*key:\s*"([^"]+)"\s*,\s*label:\s*"([^"]+)"\s*\}')
+        return [{"key": k, "label": l} for k, l in entry_re.findall(array_body)]
 
-        # Extract { key: "...", label: "..." } objects
-        entry_re = re.compile(
-            r'\{\s*key:\s*"([^"]+)"\s*,\s*label:\s*"([^"]+)"\s*\}'
-        )
-        return [
-            {"key": key, "label": label}
-            for key, label in entry_re.findall(array_body)
-        ]
-
-    gta = parse_array("GTA_COURSES", ts_source)
-    by_request = parse_array("BY_REQUEST_COURSES", ts_source)
-    return gta, by_request
+    return parse_array("GTA_COURSES", ts_source), parse_array("BY_REQUEST_COURSES", ts_source)
 
 
 # ---------------------------------------------------------------------------
@@ -141,17 +130,14 @@ def normalize_golfnow(courses: list[dict]) -> list[dict]:
     out = []
     for c in courses:
         name = c["display_name"]
-        region = "By Request (FL)" if "Vero Beach" in name else "GTA"
-        out.append(
-            {
-                "key": c["course_key"],
-                "name": name,
-                "platform": "golfnow",
-                "platform_id": str(c["facility_id"]),
-                "region": region,
-                "active": bool(c.get("active", True)),
-            }
-        )
+        out.append({
+            "key": c["course_key"],
+            "name": name,
+            "platform": "golfnow",
+            "platform_id": str(c["facility_id"]),
+            "region": "By Request (FL)" if "Vero Beach" in name else "GTA",
+            "course_active": bool(c.get("active", True)),
+        })
     return out
 
 
@@ -159,35 +145,53 @@ def normalize_chronogolf(courses: list[dict]) -> list[dict]:
     out = []
     for c in courses:
         name = c["display_name"]
-        region = "By Request (FL)" if "Vero Beach" in name else "GTA"
-        out.append(
-            {
-                "key": c["course_key"],
-                "name": name,
-                "platform": "chronogolf",
-                "platform_id": str(c["course_id"]),
-                "region": region,
-                "active": bool(c.get("active", True)),
-            }
-        )
+        out.append({
+            "key": c["course_key"],
+            "name": name,
+            "platform": "chronogolf",
+            "platform_id": str(c["course_id"]),
+            "region": "By Request (FL)" if "Vero Beach" in name else "GTA",
+            "course_active": bool(c.get("active", True)),
+        })
     return out
 
 
 def normalize_gtg(courses: list[dict]) -> list[dict]:
     out = []
     for c in courses:
-        name = c["display_name"]
-        out.append(
-            {
-                "key": c["course_key"],
-                "name": name,
-                "platform": "gtg",
-                "platform_id": c["course_key"],  # no numeric ID for GTG
-                "region": "GTA",
-                "active": True,  # GTG has no active field
-            }
-        )
+        out.append({
+            "key": c["course_key"],
+            "name": c["display_name"],
+            "platform": "gtg",
+            "platform_id": c["course_key"],
+            "region": "GTA",
+            "course_active": True,  # GTG has no active field
+        })
     return out
+
+
+def apply_platform_status(courses: list[dict], alerting_platforms: set[str]) -> list[dict]:
+    """Annotate each course with platform_active and effective_active."""
+    for c in courses:
+        c["platform_active"] = c["platform"] in alerting_platforms
+        c["effective_active"] = c["course_active"] and c["platform_active"]
+    return courses
+
+
+def active_str(c: dict) -> str:
+    if not c["platform_active"]:
+        return "no (platform dormant)"
+    return "yes" if c["course_active"] else "no"
+
+
+# ---------------------------------------------------------------------------
+# Name normalization for duplicate detection
+# ---------------------------------------------------------------------------
+
+
+def norm_name(name: str) -> str:
+    """Lowercase, strip punctuation and extra spaces for fuzzy matching."""
+    return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9 ]", "", name.lower())).strip()
 
 
 # ---------------------------------------------------------------------------
@@ -201,28 +205,12 @@ FENCE_RE = re.compile(
 
 
 def rewrite_autogen(existing: str, sections: dict[str, str]) -> str:
-    """
-    Replace content between AUTOGEN fences with new content.
-    Sections not present in `sections` dict are left unchanged.
-    """
-
     def replacer(m: re.Match) -> str:
-        open_fence = m.group(1)
-        name = m.group(2)
-        close_fence = m.group(4)
+        open_fence, name, _, close_fence = m.group(1), m.group(2), m.group(3), m.group(4)
         if name in sections:
             return f"{open_fence}\n{sections[name]}\n{close_fence}"
         return m.group(0)
-
     return FENCE_RE.sub(replacer, existing)
-
-
-def make_skeleton_state_md(sections: dict[str, str]) -> str:
-    """Create a minimal STATE.md when the file doesn't exist yet."""
-    parts = ["# Good Lie Golf — State\n"]
-    for name, content in sections.items():
-        parts.append(f"<!-- AUTOGEN:{name} -->\n{content}\n<!-- /AUTOGEN:{name} -->")
-    return "\n\n".join(parts) + "\n"
 
 
 # ---------------------------------------------------------------------------
@@ -230,9 +218,35 @@ def make_skeleton_state_md(sections: dict[str, str]) -> str:
 # ---------------------------------------------------------------------------
 
 
-def gen_last_updated(
-    api_sha: str, scraper_sha: str, frontend_sha: str
+def gen_headline_counts(
+    all_scraper: list[dict],
+    gta_frontend: list[dict],
+    by_request_frontend: list[dict],
+    alerting_platforms: set[str],
 ) -> str:
+    total_scraper = len(all_scraper)
+    total_effective = sum(1 for c in all_scraper if c["effective_active"])
+    total_frontend = len(gta_frontend) + len(by_request_frontend)
+
+    # Active-platform gap: on an active platform, course_active=True, not in frontend by name
+    frontend_norm = {norm_name(f["label"]) for f in gta_frontend + by_request_frontend}
+    active_gap = sum(
+        1 for c in all_scraper
+        if c["platform_active"] and c["course_active"]
+        and norm_name(c["name"]) not in frontend_norm
+    )
+
+    return (
+        f"| Metric | Count |\n"
+        f"|--------|-------|\n"
+        f"| Courses in scraper code | {total_scraper} |\n"
+        f"| Active (on ALERTING_PLATFORMS, course enabled) | {total_effective} |\n"
+        f"| Exposed in frontend picker | {total_frontend} |\n"
+        f"| Active-platform gap (scraper active, not in picker) | {active_gap} |"
+    )
+
+
+def gen_last_updated(api_sha: str, scraper_sha: str, frontend_sha: str) -> str:
     ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
     return (
         f"_Last refreshed: {ts} UTC_\n\n"
@@ -245,22 +259,21 @@ def gen_last_updated(
 
 
 def gen_course_counts(all_scraper: list[dict]) -> str:
-    platforms = ["golfnow", "chronogolf", "gtg"]
+    platform_order = ["golfnow", "chronogolf", "gtg"]
+    label_map = {"golfnow": "GolfNow", "chronogolf": "Chronogolf", "gtg": "GTG"}
     rows = []
     total_total = total_active = total_inactive = 0
 
-    for p in platforms:
+    for p in platform_order:
         subset = [c for c in all_scraper if c["platform"] == p]
         total = len(subset)
-        active = sum(1 for c in subset if c["active"])
+        active = sum(1 for c in subset if c["effective_active"])
         inactive = total - active
         total_total += total
         total_active += active
         total_inactive += inactive
         inactive_str = "—" if p == "gtg" else str(inactive)
-        label_map = {"golfnow": "GolfNow", "chronogolf": "Chronogolf", "gtg": "GTG"}
-        label = label_map[p]
-        rows.append(f"| {label} | {total} | {active} | {inactive_str} |")
+        rows.append(f"| {label_map[p]} | {total} | {active} | {inactive_str} |")
 
     table = (
         "| Platform | Total | Active | Inactive |\n"
@@ -269,7 +282,6 @@ def gen_course_counts(all_scraper: list[dict]) -> str:
         + f"\n| **Total** | **{total_total}** | **{total_active}** | **{total_inactive}** |"
     )
 
-    # By region
     gta_count = sum(1 for c in all_scraper if c["region"] == "GTA")
     fl_count = sum(1 for c in all_scraper if c["region"] == "By Request (FL)")
     region_table = (
@@ -297,12 +309,10 @@ def gen_courses_by_platform(all_scraper: list[dict]) -> str:
         header = f"### {p_label}\n\n"
         header += "| Key | Name | Platform ID | Region | Active |\n"
         header += "|-----|------|-------------|--------|--------|\n"
-        rows = []
-        for c in sorted(subset, key=lambda x: x["name"]):
-            active_str = "yes" if c["active"] else "no"
-            rows.append(
-                f"| {c['key']} | {c['name']} | {c['platform_id']} | {c['region']} | {active_str} |"
-            )
+        rows = [
+            f"| {c['key']} | {c['name']} | {c['platform_id']} | {c['region']} | {active_str(c)} |"
+            for c in sorted(subset, key=lambda x: x["name"])
+        ]
         sections.append(header + "\n".join(rows))
     return "\n\n".join(sections)
 
@@ -313,31 +323,39 @@ def gen_coverage_gaps(
     by_request_frontend: list[dict],
 ) -> str:
     all_frontend = gta_frontend + by_request_frontend
+    frontend_norm = {norm_name(f["label"]): f for f in all_frontend}
+    scraper_by_norm = {norm_name(c["name"]): c for c in all_scraper}
 
-    # Build lookup sets by normalized display name
-    scraper_names = {c["name"].strip().lower(): c for c in all_scraper}
-    # Frontend GTA_COURSES use display name as key; BY_REQUEST uses slug key but label is display name
-    frontend_names = {f["label"].strip().lower(): f for f in all_frontend}
+    # Partition scraper-only entries
+    scraper_only = [c for nn, c in scraper_by_norm.items() if nn not in frontend_norm]
+    active_gaps = [c for c in scraper_only if c["platform_active"] and c["course_active"]]
+    dormant_entries = [c for c in scraper_only if not c["platform_active"] or not c["course_active"]]
 
-    scraper_only = [
-        c for norm, c in scraper_names.items() if norm not in frontend_names
-    ]
-    frontend_only = [
-        f for norm, f in frontend_names.items() if norm not in scraper_names
-    ]
+    # Frontend-only
+    frontend_only = [f for nn, f in frontend_norm.items() if nn not in scraper_by_norm]
 
     parts = []
 
-    parts.append("### Scraper-only (not in frontend picker)\n")
-    if scraper_only:
+    parts.append("### Active-platform gaps (scraper active, not in frontend picker)\n")
+    if active_gaps:
         parts.append("| Platform | Key | Name |")
         parts.append("|----------|-----|------|")
-        for c in sorted(scraper_only, key=lambda x: x["name"]):
+        for c in sorted(active_gaps, key=lambda x: x["name"]):
             parts.append(f"| {c['platform']} | {c['key']} | {c['name']} |")
     else:
-        parts.append("_None — all scraper courses are in the frontend picker._")
+        parts.append("_None — all active-platform courses are in the frontend picker._")
 
-    parts.append("\n### Frontend-only (not in scraper)\n")
+    parts.append("\n### Dormant-platform / disabled entries (informational)\n")
+    if dormant_entries:
+        parts.append("| Platform | Key | Name | Reason |")
+        parts.append("|----------|-----|------|--------|")
+        for c in sorted(dormant_entries, key=lambda x: x["name"]):
+            reason = "platform dormant" if not c["platform_active"] else "course disabled in scraper"
+            parts.append(f"| {c['platform']} | {c['key']} | {c['name']} | {reason} |")
+    else:
+        parts.append("_None._")
+
+    parts.append("\n### Frontend-only (in picker but not in scraper)\n")
     if frontend_only:
         parts.append("| Key | Label |")
         parts.append("|-----|-------|")
@@ -349,13 +367,50 @@ def gen_coverage_gaps(
     return "\n".join(parts)
 
 
-def gen_platforms_status() -> str:
+def gen_cross_platform_duplicates(all_scraper: list[dict]) -> str:
+    groups: dict[str, list[dict]] = defaultdict(list)
+    for c in all_scraper:
+        groups[norm_name(c["name"])].append(c)
+
+    dupes = {
+        nn: courses for nn, courses in groups.items()
+        if len({c["platform"] for c in courses}) > 1
+    }
+
+    if not dupes:
+        return "_No cross-platform duplicates detected._"
+
+    rows = []
+    for nn, courses in sorted(dupes.items()):
+        platforms = sorted({c["platform"] for c in courses})
+        keys = ", ".join(c["key"] for c in sorted(courses, key=lambda x: x["platform"]))
+        active_pf = sorted({c["platform"] for c in courses if c["platform_active"]})
+        display_name = courses[0]["name"]
+        rows.append(
+            f"| {display_name} | {', '.join(platforms)} | {keys} | {', '.join(active_pf) or '—'} |"
+        )
+
+    return (
+        "| Name | Platforms | Keys | Active Platforms |\n"
+        "|------|-----------|------|------------------|\n"
+        + "\n".join(rows)
+    )
+
+
+def gen_platforms_status(alerting_platforms: set[str]) -> str:
+    all_platforms = [
+        ("gtg",        "GTG",        "tee_sniper.py",        "City of Toronto municipal courses"),
+        ("golfnow",    "GolfNow",    "golfnow_scraper.py",   ""),
+        ("chronogolf", "Chronogolf", "chronogolf_scraper.py", "Polled when user alerts target Chronogolf courses; none configured to date"),
+    ]
+    rows = []
+    for p_key, p_label, p_file, p_note in all_platforms:
+        status = "in ALERTING_PLATFORMS" if p_key in alerting_platforms else "not in ALERTING_PLATFORMS"
+        rows.append(f"| {p_label} | {status} | {p_file} | {p_note} |")
     return (
         "| Platform | Status | Scraper File | Notes |\n"
         "|----------|--------|-------------|-------|\n"
-        "| GTG | active | tee_sniper.py | City of Toronto municipal courses |\n"
-        "| GolfNow | active | golfnow_scraper.py | |\n"
-        "| Chronogolf | tracked, not in ALERTING_PLATFORMS | chronogolf_scraper.py | |"
+        + "\n".join(rows)
     )
 
 
@@ -365,14 +420,8 @@ def gen_platforms_status() -> str:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Refresh docs/STATE.md with live course data."
-    )
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Parse and diff but do not write STATE.md.",
-    )
+    parser = argparse.ArgumentParser(description="Refresh docs/STATE.md with live course data.")
+    parser.add_argument("--dry-run", action="store_true", help="Parse but do not write STATE.md.")
     args = parser.parse_args()
 
     token = os.environ.get("GITHUB_TOKEN", "")
@@ -380,18 +429,21 @@ def main() -> None:
         print("ERROR: GITHUB_TOKEN environment variable is not set.", file=sys.stderr)
         sys.exit(1)
 
-    scraper_url = f"https://x-access-token:{token}@github.com/dustinkeating87/foreward-scraper.git"
-    frontend_url = f"https://x-access-token:{token}@github.com/dustinkeating87/foreward.git"
+    # Parse ALERTING_PLATFORMS from local admin.py (authoritative source)
+    alerting_platforms: set[str] = set(
+        extract_list_constant(ADMIN_PY.read_text(), "ALERTING_PLATFORMS")
+    )
+    print(f"ALERTING_PLATFORMS: {sorted(alerting_platforms)}")
 
     api_sha = get_self_sha()
 
+    scraper_url  = f"https://x-access-token:{token}@github.com/dustinkeating87/foreward-scraper.git"
+    frontend_url = f"https://x-access-token:{token}@github.com/dustinkeating87/foreward.git"
+
     with tempfile.TemporaryDirectory(prefix="refresh_state_") as tmpdir:
-        scraper_dir = os.path.join(tmpdir, "foreward-scraper")
+        scraper_dir  = os.path.join(tmpdir, "foreward-scraper")
         frontend_dir = os.path.join(tmpdir, "foreward")
 
-        # ------------------------------------------------------------------
-        # Clone repos
-        # ------------------------------------------------------------------
         print("Cloning foreward-scraper…")
         clone_repo(scraper_url, scraper_dir)
         scraper_sha = get_sha(scraper_dir)
@@ -402,92 +454,67 @@ def main() -> None:
         frontend_sha = get_sha(frontend_dir)
         print(f"  foreward (frontend) @ {frontend_sha}")
 
-        # ------------------------------------------------------------------
         # Parse scraper sources
-        # ------------------------------------------------------------------
-        golfnow_path = os.path.join(scraper_dir, "golfnow_scraper.py")
-        chronogolf_path = os.path.join(scraper_dir, "chronogolf_scraper.py")
-        tee_sniper_path = os.path.join(scraper_dir, "tee_sniper.py")
+        tee_sniper_path   = os.path.join(scraper_dir, "tee_sniper.py")
+        golfnow_path      = os.path.join(scraper_dir, "golfnow_scraper.py")
+        chronogolf_path   = os.path.join(scraper_dir, "chronogolf_scraper.py")
 
-        golfnow_raw = extract_course_list(
-            Path(golfnow_path).read_text(), "GOLFNOW_COURSES"
-        )
-        chronogolf_raw = extract_course_list(
-            Path(chronogolf_path).read_text(), "CHRONOGOLF_COURSES"
-        )
-        gtg_raw = extract_course_list(
-            Path(tee_sniper_path).read_text(), "GTG_COURSES"
-        )
+        golfnow_raw    = extract_list_constant(Path(golfnow_path).read_text(),    "GOLFNOW_COURSES")
+        chronogolf_raw = extract_list_constant(Path(chronogolf_path).read_text(), "CHRONOGOLF_COURSES")
+        gtg_raw        = extract_list_constant(Path(tee_sniper_path).read_text(), "GTG_COURSES")
 
-        # Zero-course guard
-        if len(golfnow_raw) == 0:
+        if not golfnow_raw:
             raise RuntimeError("GOLFNOW_COURSES returned 0 courses — aborting.")
-        if len(chronogolf_raw) == 0:
+        if not chronogolf_raw:
             raise RuntimeError("CHRONOGOLF_COURSES returned 0 courses — aborting.")
-        if len(gtg_raw) == 0:
+        if not gtg_raw:
             raise RuntimeError("GTG_COURSES returned 0 courses — aborting.")
 
-        # ------------------------------------------------------------------
         # Parse frontend
-        # ------------------------------------------------------------------
-        courses_ts_path = os.path.join(frontend_dir, "src", "lib", "courses.ts")
-        ts_source = Path(courses_ts_path).read_text()
+        ts_source = Path(os.path.join(frontend_dir, "src", "lib", "courses.ts")).read_text()
         gta_frontend, by_request_frontend = extract_frontend_courses(ts_source)
 
-        if len(gta_frontend) + len(by_request_frontend) == 0:
+        if not gta_frontend and not by_request_frontend:
             raise RuntimeError("Frontend courses.ts returned 0 courses — aborting.")
 
-        # ------------------------------------------------------------------
-        # Normalize
-        # ------------------------------------------------------------------
-        golfnow_norm = normalize_golfnow(golfnow_raw)
-        chronogolf_norm = normalize_chronogolf(chronogolf_raw)
-        gtg_norm = normalize_gtg(gtg_raw)
-        all_scraper = golfnow_norm + chronogolf_norm + gtg_norm
+        # Normalize and annotate with platform status
+        all_scraper = apply_platform_status(
+            normalize_golfnow(golfnow_raw)
+            + normalize_chronogolf(chronogolf_raw)
+            + normalize_gtg(gtg_raw),
+            alerting_platforms,
+        )
 
-        # ------------------------------------------------------------------
-        # Print counts
-        # ------------------------------------------------------------------
         print(f"\nCourse counts:")
-        print(f"  GolfNow:    {len(golfnow_norm)} total  ({sum(1 for c in golfnow_norm if c['active'])} active)")
-        print(f"  Chronogolf: {len(chronogolf_norm)} total  ({sum(1 for c in chronogolf_norm if c['active'])} active)")
-        print(f"  GTG:        {len(gtg_norm)} total  (all active, no flag)")
-        print(f"  Frontend GTA_COURSES:        {len(gta_frontend)}")
-        print(f"  Frontend BY_REQUEST_COURSES: {len(by_request_frontend)}")
+        for p, label in [("golfnow", "GolfNow"), ("chronogolf", "Chronogolf"), ("gtg", "GTG")]:
+            subset = [c for c in all_scraper if c["platform"] == p]
+            eff = sum(1 for c in subset if c["effective_active"])
+            print(f"  {label}: {len(subset)} total  ({eff} effective active)")
+        print(f"  Frontend: {len(gta_frontend)} GTA + {len(by_request_frontend)} by-request")
 
-        # ------------------------------------------------------------------
-        # Build sections
-        # ------------------------------------------------------------------
         sections = {
-            "last_updated": gen_last_updated(api_sha, scraper_sha, frontend_sha),
-            "course_counts": gen_course_counts(all_scraper),
-            "courses_by_platform": gen_courses_by_platform(all_scraper),
-            "coverage_gaps": gen_coverage_gaps(
-                all_scraper, gta_frontend, by_request_frontend
+            "headline_counts": gen_headline_counts(
+                all_scraper, gta_frontend, by_request_frontend, alerting_platforms
             ),
-            "platforms_status": gen_platforms_status(),
+            "last_updated":       gen_last_updated(api_sha, scraper_sha, frontend_sha),
+            "course_counts":      gen_course_counts(all_scraper),
+            "courses_by_platform": gen_courses_by_platform(all_scraper),
+            "coverage_gaps":      gen_coverage_gaps(all_scraper, gta_frontend, by_request_frontend),
+            "cross_platform_duplicates": gen_cross_platform_duplicates(all_scraper),
+            "platforms_status":   gen_platforms_status(alerting_platforms),
         }
 
-        # ------------------------------------------------------------------
-        # Write STATE.md
-        # ------------------------------------------------------------------
         if args.dry_run:
             print("\n--dry-run: skipping STATE.md write.")
-            print(f"\nScraper SHA:  {scraper_sha}")
-            print(f"Frontend SHA: {frontend_sha}")
-            print(f"API SHA:      {api_sha}")
             return
 
-        # Read existing file (or create skeleton)
         if STATE_MD.exists():
             existing = STATE_MD.read_text()
             new_content = rewrite_autogen(existing, sections)
         else:
-            print(f"\ndocs/STATE.md not found — creating from scratch.")
-            STATE_MD.parent.mkdir(parents=True, exist_ok=True)
-            new_content = make_skeleton_state_md(sections)
+            raise RuntimeError("docs/STATE.md not found — scaffold must exist before running.")
 
-        if STATE_MD.exists() and STATE_MD.read_text() == new_content:
+        if existing == new_content:
             print("\ndocs/STATE.md is already up to date — no write needed.")
         else:
             STATE_MD.write_text(new_content)

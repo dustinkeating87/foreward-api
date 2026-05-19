@@ -6,16 +6,29 @@
 
 ---
 
+## Headline Counts
+
+<!-- AUTOGEN:headline_counts -->
+| Metric | Count |
+|--------|-------|
+| Courses in scraper code | 151 |
+| Active (on ALERTING_PLATFORMS, course enabled) | 150 |
+| Exposed in frontend picker | 39 |
+| Active-platform gap (scraper active, not in picker) | 109 |
+<!-- /AUTOGEN:headline_counts -->
+
+---
+
 ## Last Updated
 
 <!-- AUTOGEN:last_updated -->
-_Last refreshed: 2026-05-19 17:29:50 UTC_
+_Last refreshed: 2026-05-19 18:20:55 UTC_
 
 | Source | Commit |
 |--------|--------|
-| foreward-api | 10d30872c74279f7743bfdcd66cd02c9555dfe9a |
-| foreward-scraper | f592b71f67f5c45d7eb0d50c8d8ed77c37e624f6 |
-| foreward (frontend) | 84ca65033b437df29a858194e26aed5b0d81a4b2 |
+| foreward-api | a313474c25f6568d5297d6a14dd3c2e58ce0a5fc |
+| foreward-scraper | 03e427539741360f0d2d9702f175e2f45bc8ee8c |
+| foreward (frontend) | 380e0858af788b9131a5f66e37cd02d8165904cb |
 <!-- /AUTOGEN:last_updated -->
 
 ---
@@ -214,7 +227,7 @@ By region:
 ## Coverage Gaps
 
 <!-- AUTOGEN:coverage_gaps -->
-### Scraper-only (not in frontend picker)
+### Active-platform gaps (scraper active, not in frontend picker)
 
 | Platform | Key | Name |
 |----------|-----|------|
@@ -273,7 +286,6 @@ By region:
 | chronogolf | lakeridge-links | Lakeridge Links Golf Club |
 | chronogolf | legacy-pines-golf-club | Legacy Pines Golf Club |
 | chronogolf | lionhead-legends | Lionhead Golf Club – Legends Course |
-| chronogolf | lionhead-masters | Lionhead Golf Club – Masters Course |
 | golfnow | lowville-golf-club | Lowville Golf Club |
 | chronogolf | lowville-heights-golf-club | Lowville Heights Golf Club |
 | chronogolf | lyndebrook-golf-club | Lyndebrook Golf Club |
@@ -326,10 +338,29 @@ By region:
 | golfnow | wooden-sticks-golf-club | Wooden Sticks Golf Club |
 | chronogolf | wyldewood-golf-country-club | Wyldewood Golf & Country Club |
 
-### Frontend-only (not in scraper)
+### Dormant-platform / disabled entries (informational)
+
+| Platform | Key | Name | Reason |
+|----------|-----|------|--------|
+| chronogolf | lionhead-masters | Lionhead Golf Club – Masters Course | course disabled in scraper |
+
+### Frontend-only (in picker but not in scraper)
 
 _None — all frontend courses are tracked in the scraper._
 <!-- /AUTOGEN:coverage_gaps -->
+
+---
+
+## Cross-Platform Duplicates
+
+<!-- AUTOGEN:cross_platform_duplicates -->
+| Name | Platforms | Keys | Active Platforms |
+|------|-----------|------|------------------|
+| Angus Glen Golf Club – North Course | chronogolf, golfnow | angus-glen-golf-club-north-course, angus-glen-north | chronogolf, golfnow |
+| Goreway Golf Club | chronogolf, golfnow | parkshore-golf-club, goreway-golf-club | chronogolf, golfnow |
+| Pickering Glen Golf Club | chronogolf, golfnow | pickering-glen-golf-club, pickering-glen | chronogolf, golfnow |
+| Winchester Golf Club | chronogolf, golfnow | winchester-golf-club-ontario-brooklyn, winchester | chronogolf, golfnow |
+<!-- /AUTOGEN:cross_platform_duplicates -->
 
 ---
 
@@ -338,7 +369,7 @@ _None — all frontend courses are tracked in the scraper._
 <!-- AUTOGEN:platforms_status -->
 | Platform | Status | Scraper File | Notes |
 |----------|--------|-------------|-------|
-| GTG | active | tee_sniper.py | City of Toronto municipal courses |
-| GolfNow | active | golfnow_scraper.py | |
-| Chronogolf | tracked, not in ALERTING_PLATFORMS | chronogolf_scraper.py | |
+| GTG | in ALERTING_PLATFORMS | tee_sniper.py | City of Toronto municipal courses |
+| GolfNow | in ALERTING_PLATFORMS | golfnow_scraper.py |  |
+| Chronogolf | in ALERTING_PLATFORMS | chronogolf_scraper.py | Polled when user alerts target Chronogolf courses; none configured to date |
 <!-- /AUTOGEN:platforms_status -->
