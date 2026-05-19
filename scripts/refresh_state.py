@@ -94,12 +94,13 @@ def extract_list_constant(source: str, varname: str) -> list:
 
 def extract_frontend_courses(ts_source: str) -> tuple[list[dict], list[dict]]:
     """
-    Parse GTA_COURSES and BY_REQUEST_COURSES arrays from courses.ts.
-    Returns (gta_courses, by_request_courses) where each entry is {"key", "label"}.
+    Parse RAW_COURSES and BY_REQUEST_COURSES arrays from courses.ts.
+    Returns (main_courses, by_request_courses) where each entry is {"key", "label", "region"}.
     """
 
     def parse_array(array_name: str, source: str) -> list[dict]:
-        pattern = rf"export\s+const\s+{array_name}[^=]*=\s*\["
+        # Match both exported and non-exported const declarations (RAW_COURSES is not exported)
+        pattern = rf"(?:export\s+)?const\s+{array_name}[^=]*=\s*\["
         m = re.search(pattern, source)
         if not m:
             return []
@@ -115,10 +116,12 @@ def extract_frontend_courses(ts_source: str) -> tuple[list[dict], list[dict]]:
                     end = i
                     break
         array_body = source[start : end + 1]
-        entry_re = re.compile(r'\{\s*key:\s*"([^"]+)"\s*,\s*label:\s*"([^"]+)"\s*\}')
-        return [{"key": k, "label": l} for k, l in entry_re.findall(array_body)]
+        entry_re = re.compile(
+            r'\{\s*key:\s*"([^"]+)"\s*,\s*label:\s*"([^"]+)"\s*,\s*region:\s*"([^"]+)"\s*\}'
+        )
+        return [{"key": k, "label": l, "region": r} for k, l, r in entry_re.findall(array_body)]
 
-    return parse_array("GTA_COURSES", ts_source), parse_array("BY_REQUEST_COURSES", ts_source)
+    return parse_array("RAW_COURSES", ts_source), parse_array("BY_REQUEST_COURSES", ts_source)
 
 
 # ---------------------------------------------------------------------------
@@ -473,6 +476,9 @@ def main() -> None:
         # Parse frontend
         ts_source = Path(os.path.join(frontend_dir, "src", "lib", "courses.ts")).read_text()
         gta_frontend, by_request_frontend = extract_frontend_courses(ts_source)
+
+        total_frontend = len(gta_frontend) + len(by_request_frontend)
+        print(f"Frontend parsed: {total_frontend} courses found in src/lib/courses.ts")
 
         if not gta_frontend and not by_request_frontend:
             raise RuntimeError("Frontend courses.ts returned 0 courses — aborting.")
