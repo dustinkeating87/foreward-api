@@ -11,10 +11,10 @@
 <!-- AUTOGEN:headline_counts -->
 | Metric | Count |
 |--------|-------|
-| Courses in scraper code | 135 |
-| Active (on ALERTING_PLATFORMS, course enabled) | 134 |
+| Courses in scraper code | 134 |
+| Active (on ALERTING_PLATFORMS, course enabled) | 133 |
 | Exposed in frontend picker | 39 |
-| Active-platform gap (scraper active, not in picker) | 98 |
+| Active-platform gap (scraper active, not in picker) | 97 |
 <!-- /AUTOGEN:headline_counts -->
 
 ---
@@ -22,12 +22,12 @@
 ## Last Updated
 
 <!-- AUTOGEN:last_updated -->
-_Last refreshed: 2026-05-19 20:02:55 UTC_
+_Last refreshed: 2026-05-19 20:07:25 UTC_
 
 | Source | Commit |
 |--------|--------|
-| foreward-api | feb190a889f66817e001e1fcf55aa298479fa597 |
-| foreward-scraper | 2ed75dad2b83d8901ef5b41c4aab2e7f7a81b82e |
+| foreward-api | 2f327c9ef6446cd65ad9503da1d3d78ac497436b |
+| foreward-scraper | 12a830e60a76e68204eadd43683cb866e2d01ce2 |
 | foreward (frontend) | 380e0858af788b9131a5f66e37cd02d8165904cb |
 <!-- /AUTOGEN:last_updated -->
 
@@ -38,15 +38,15 @@ _Last refreshed: 2026-05-19 20:02:55 UTC_
 <!-- AUTOGEN:course_counts -->
 | Platform | Total | Active | Inactive |
 |----------|-------|--------|----------|
-| GolfNow | 55 | 55 | 0 |
+| GolfNow | 54 | 54 | 0 |
 | Chronogolf | 74 | 73 | 1 |
 | GTG | 6 | 6 | — |
-| **Total** | **135** | **134** | **1** |
+| **Total** | **134** | **133** | **1** |
 By region:
 
 | Region | Count |
 |--------|-------|
-| GTA | 133 |
+| GTA | 132 |
 | By Request (FL) | 2 |
 <!-- /AUTOGEN:course_counts -->
 
@@ -72,7 +72,6 @@ By region:
 | deer-creek-golf-club-south-course | Deer Creek Golf Club South Course | 14423 | GTA | yes |
 | deerfield-golf-club-on | Deerfield Golf Club (ON) | 12335 | GTA | yes |
 | dragons-fire-golf-club | Dragon's Fire Golf Club | 7772 | GTA | yes |
-| dunnys-divots | Dunny's Divots | 19485 | GTA | yes |
 | eagles-nest | Eagles Nest Golf Club | 4885 | GTA | yes |
 | east-wing-golf-course-cardinal-golf-club | East Wing Golf Course - Cardinal Golf Club | 13390 | GTA | yes |
 | flemingdon-park | Flemingdon Park Golf Club | 12047 | GTA | yes |
@@ -242,7 +241,6 @@ By region:
 | golfnow | cherry-downs | Cherry Downs |
 | golfnow | deerfield-golf-club-on | Deerfield Golf Club (ON) |
 | golfnow | dragons-fire-golf-club | Dragon's Fire Golf Club |
-| golfnow | dunnys-divots | Dunny's Divots |
 | golfnow | east-wing-golf-course-cardinal-golf-club | East Wing Golf Course - Cardinal Golf Club |
 | chronogolf | eldorado-golf-club | Eldorado Golf Club |
 | golfnow | foxbridge-golf-course | Foxbridge Golf Course |
