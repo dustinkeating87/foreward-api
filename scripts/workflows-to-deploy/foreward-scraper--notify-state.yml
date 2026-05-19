@@ -1,0 +1,34 @@
+# PASTE THIS FILE INTO:
+#   foreward-scraper repo → .github/workflows/notify-state.yml
+#
+# Required secret: STATE_UPDATE_TOKEN
+#   A GitHub PAT with `repo` scope (specifically `workflow` dispatch permission)
+#   on dustinkeating87/foreward-api. Create at:
+#   https://github.com/settings/tokens/new?description=state-update-token&scopes=repo
+#   Then add to foreward-scraper secrets:
+#   https://github.com/dustinkeating87/foreward-scraper/settings/secrets/actions/new
+
+name: Notify foreward-api of state change
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch state-refresh to foreward-api
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.STATE_UPDATE_TOKEN }}
+          script: |
+            await github.rest.repos.createDispatchEvent({
+              owner: "dustinkeating87",
+              repo:  "foreward-api",
+              event_type: "state-refresh",
+              client_payload: {
+                source: "foreward-scraper",
+                sha:    context.sha,
+              },
+            });

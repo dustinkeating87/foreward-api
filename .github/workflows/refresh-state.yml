@@ -1,0 +1,41 @@
+name: Refresh STATE.md
+
+on:
+  repository_dispatch:
+    types: [state-refresh]
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - scripts/refresh_state.py
+      - docs/STATE.md
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run refresh_state.py
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 scripts/refresh_state.py
+
+      - name: Commit updated STATE.md
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/STATE.md
+          if git diff --cached --quiet; then
+            echo "STATE.md unchanged — nothing to commit"
+          else
+            SOURCE="${{ github.event.client_payload.source || 'self' }}"
+            git commit -m "chore(state): auto-refresh from ${SOURCE}"
+            git push
+          fi
