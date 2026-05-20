@@ -940,7 +940,7 @@ before next design pass to prevent re-litigating.
 
 35. **Block 1–3 schema columns may be partially vestigial after 2026-05-18 pricing pivot.** `polling_expires_at`, `renewals_used`, `expiry_state`, `final_expired_at`, `final_expired_at` on user_profiles — verify which are still meaningful under the new one-alert free-tier model. Touch code paths in `free_tier_expiry_loop.py` carefully. Audit needed before next free-tier code change.
 
-36. **Scraper polls every cycle regardless of alert date_from.** Active alerts with date_from in the future (e.g. June 13 when today is May 20) cause the scraper to fetch tee times every 60s with zero match potential. Each poll burns 3-4 GolfNow API calls, proxy quota, and Railway compute. At current scale of 1 active future-dated alert, cost is negligible; at scale with free tier enabled, this is a material efficiency bug and a potential rate-limiting risk with GolfNow. Investigation and fix needed before FREE_TIER_ENABLED=true. Filed as new ClickUp ticket.
+36. ~~**Scraper polls every cycle regardless of alert date_from.**~~ ✓ **RESOLVED 2026-05-20** (commit `8659747` foreward-scraper). Active alerts with date_from in the future (e.g. June 13 when today is May 20) cause the scraper to fetch tee times every 60s with zero match potential. Each poll burns 3-4 GolfNow API calls, proxy quota, and Railway compute. Root cause: `_alert_courses` was built from all active alerts with no date-window check, while `target_searches` was correctly window-filtered — the Cartesian product at `poll_golfnow_tee_times` caused courses from out-of-window alerts to be fetched against in-window dates from other alerts. Fix: `_alert_courses` now only includes courses from alerts that contributed at least one date to `_full_searches` or `_gtg_dates`. Architectural follow-up (deferred refactor to per-alert tuples): ClickUp `86ahkj8k2`.
 
 ---
 
@@ -1000,6 +1000,20 @@ ClickUp is the live source of truth — this list is point-in-time.
 ---
 
 ## Decision log
+
+### 2026-05-20 (scraper date-window polling bug — closed 86ahkhqhf)
+
+Closed pre-launch efficiency bug surfaced by alert e7b90fc5 (date_from 2026-06-13, 24 days out). Scraper was polling GolfNow for lakeview, braeben, braeben-academy every 60s despite the alert's window being out of range.
+
+Root cause: `tee_sniper.py` built `target_searches` (dates) and `_alert_courses` (courses) in two independent loops. The dates loop applied the 14-day lookahead correctly; the courses loop did not. Combined as a Cartesian product at `poll_golfnow_tee_times`, the mismatch created wasted API calls scaling linearly with future-dated alerts × in-window dates contributed by other alerts.
+
+Fix (commit `8659747`, foreward-scraper/main): track which alerts contributed at least one date to `_full_searches`/`_gtg_dates`; only include an alert's courses in `_alert_courses` if it's in the contributing set. Five-line patch, no signature changes, no platform-scraper changes.
+
+AC4 verification pending in production logs (Railway session expired during Phase 4 session — verify manually): look for `"Course filter applied — 1 alerts contributed courses (of 2 active)"` and confirm GolfNow no longer fetches lakeview/braeben/braeben-academy each cycle.
+
+Architectural follow-up filed (ClickUp `86ahkj8k2`): the two-set Cartesian pattern is a recurring shape; per-alert tuples would eliminate the bug class entirely. Deferred to normal priority, no commitment, revisit before free-tier scale or 4th per-alert dimension.
+
+Lesson: the lookahead concept existed and was correct for `target_searches`; the bug was that it wasn't applied to `_alert_courses`. Window-filter parity between the two sets, not a missing feature.
 
 ### 2026-05-20 (Wave 1 — picker pipeline + courses.json source-of-truth)
 
