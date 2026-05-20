@@ -22,13 +22,13 @@
 ## Last Updated
 
 <!-- AUTOGEN:last_updated -->
-_Last refreshed: 2026-05-20 14:52:45 UTC_
+_Last refreshed: 2026-05-20 15:14:08 UTC_
 
 | Source | Commit |
 |--------|--------|
-| foreward-api | f229cfea59f381d4beb70b80d5d48ca49be28198 |
+| foreward-api | c48f1f0a908841be2d796fc592e41b9e0eb133a6 |
 | foreward-scraper | 86597470d7ba165f2a2602652e035c294b8a7a0a |
-| foreward (frontend) | eb2d080a26a46e470c701fd1edd76cc3bb8d69ed |
+| foreward (frontend) | fedf372dc506202aa43422455f2ae68ff50179c9 |
 <!-- /AUTOGEN:last_updated -->
 
 ---
