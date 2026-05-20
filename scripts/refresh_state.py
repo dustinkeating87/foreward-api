@@ -10,6 +10,7 @@ Usage:
 
 import argparse
 import ast
+import json
 import os
 import re
 import subprocess
@@ -27,6 +28,7 @@ from pathlib import Path
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
 STATE_MD = REPO_ROOT / "docs" / "STATE.md"
+COURSES_JSON = REPO_ROOT / "docs" / "courses.json"
 ADMIN_PY = REPO_ROOT / "app" / "routers" / "admin.py"
 
 
@@ -418,6 +420,60 @@ def gen_platforms_status(alerting_platforms: set[str]) -> str:
 
 
 # ---------------------------------------------------------------------------
+# courses.json emitter
+# ---------------------------------------------------------------------------
+
+
+def emit_courses_json(
+    all_scraper: list[dict],
+    api_sha: str,
+    scraper_sha: str,
+    frontend_sha: str,
+) -> None:
+    """Write docs/courses.json — canonical machine-readable course list."""
+    courses = [
+        {
+            "key": c["key"],
+            "name": c["name"],
+            "platform": c["platform"],
+            "platform_id": c["platform_id"],
+            "active": c["course_active"],
+        }
+        for c in all_scraper
+        if c["platform_active"]
+    ]
+    courses.sort(key=lambda c: (c["name"].lower(), c["key"]))
+
+    data = {
+        "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "source_commit_shas": {
+            "foreward_api": api_sha,
+            "foreward_scraper": scraper_sha,
+            "foreward": frontend_sha,
+        },
+        "courses": courses,
+    }
+
+    COURSES_JSON.write_text(json.dumps(data, indent=2, sort_keys=False) + "\n")
+
+    total = len(courses)
+    print(f"\nWrote {COURSES_JSON} ({total} courses)")
+
+    per_platform = {}
+    for p in ["golfnow", "chronogolf", "gtg"]:
+        per_platform[p] = sum(1 for c in courses if c["platform"] == p)
+    print(f"  golfnow={per_platform['golfnow']}  chronogolf={per_platform['chronogolf']}  gtg={per_platform['gtg']}")
+
+    if courses:
+        print("\nFirst 5 (alphabetical by name):")
+        for c in courses[:5]:
+            print(f"  [{c['platform']}] {c['name']}  ({c['key']})")
+        print("Last 5:")
+        for c in courses[-5:]:
+            print(f"  [{c['platform']}] {c['name']}  ({c['key']})")
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -525,6 +581,8 @@ def main() -> None:
         else:
             STATE_MD.write_text(new_content)
             print(f"\nWrote {STATE_MD}")
+
+        emit_courses_json(all_scraper, api_sha, scraper_sha, frontend_sha)
 
         print(f"\nScraper SHA:  {scraper_sha}")
         print(f"Frontend SHA: {frontend_sha}")
