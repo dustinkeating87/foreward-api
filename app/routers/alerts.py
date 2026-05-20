@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException, Depends, Query
 from app.config import settings
 from app.database import supabase_admin
 from app.dependencies import get_current_user, get_current_user_with_profile
+from app.email import send_free_tier_signup_email
 from app.schemas import AlertProfileCreate, AlertProfileUpdate
 
 router = APIRouter(tags=["alerts"])
@@ -99,6 +100,11 @@ def create_alert(body: AlertProfileCreate, ctx=Depends(get_current_user_with_pro
             "free_tier_used_at": now.isoformat(),
         }).eq("id", user_id).execute()
         log.info("free_tier_create: alert=%s user=%s", result.data[0]["id"], user_id[:8])
+        send_free_tier_signup_email(
+            user_email=ctx["user"].email or "",
+            course_name=(body.courses or ["unknown"])[0],
+            alert_id=result.data[0]["id"],
+        )
         return result.data[0]
 
     # User has used their first free alert — check grace retry eligibility

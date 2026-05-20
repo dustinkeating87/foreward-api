@@ -3,6 +3,7 @@ from fastapi import APIRouter, HTTPException, Request, Depends
 from app.config import settings
 from app.database import supabase_admin
 from app.dependencies import get_current_user
+from app.email import send_paid_signup_email
 from app.schemas import CheckoutSessionRequest
 from datetime import datetime, timezone
 
@@ -107,6 +108,14 @@ def _handle_checkout_completed(session: dict):
         updates["trial_end"] = trial_end
 
     supabase_admin.table("user_profiles").update(updates).eq("id", user_id).execute()
+
+    profile_result = supabase_admin.table("user_profiles").select("email").eq("id", user_id).maybe_single().execute()
+    user_email = (profile_result.data or {}).get("email") or ""
+    send_paid_signup_email(
+        user_email=user_email,
+        stripe_subscription_id=subscription_id or "",
+        amount_cad=9.99,
+    )
 
 
 def _handle_subscription_deleted(subscription: dict):

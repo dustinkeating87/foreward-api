@@ -116,6 +116,78 @@ def send_heartbeat_recovery_email(was_stale_seconds: int, threshold_seconds: int
     )
 
 
+def send_free_tier_signup_email(user_email: str, course_name: str, alert_id: str) -> None:
+    from datetime import datetime, timezone
+    now_utc_iso = datetime.now(timezone.utc).isoformat()
+    to = os.environ.get("SIGNUP_NOTIFY_TO") or os.environ.get("ALARM_EMAIL_TO")
+    if not to:
+        log.warning("send_free_tier_signup_email: no recipient configured (SIGNUP_NOTIFY_TO/ALARM_EMAIL_TO), skipping")
+        return
+    sg_key = os.environ.get("SENDGRID_API_KEY", "")
+    if not sg_key:
+        log.warning("send_free_tier_signup_email: SENDGRID_API_KEY not set, skipping")
+        return
+    from_addr = os.environ.get("ALARM_EMAIL_FROM", "hello@goodlie.golf")
+    html = (
+        f"<h2>New free-tier signup</h2>"
+        f"<p><strong>Email:</strong> {user_email}</p>"
+        f"<p><strong>First alert course:</strong> {course_name}</p>"
+        f"<p><strong>Alert ID:</strong> {alert_id}</p>"
+        f"<p><strong>Time:</strong> {now_utc_iso}</p>"
+    )
+    try:
+        r = httpx.post(
+            "https://api.sendgrid.com/v3/mail/send",
+            headers={"Authorization": f"Bearer {sg_key}", "Content-Type": "application/json"},
+            json={
+                "personalizations": [{"to": [{"email": to}]}],
+                "from": {"email": from_addr, "name": "Good Lie"},
+                "subject": f"New free-tier signup: {user_email}",
+                "content": [{"type": "text/html", "value": html}],
+            },
+            timeout=15,
+        )
+        r.raise_for_status()
+    except Exception as exc:
+        log.error("send_free_tier_signup_email: failed user=%s — %s", user_email, exc)
+
+
+def send_paid_signup_email(user_email: str, stripe_subscription_id: str, amount_cad: float) -> None:
+    from datetime import datetime, timezone
+    now_utc_iso = datetime.now(timezone.utc).isoformat()
+    to = os.environ.get("SIGNUP_NOTIFY_TO") or os.environ.get("ALARM_EMAIL_TO")
+    if not to:
+        log.warning("send_paid_signup_email: no recipient configured (SIGNUP_NOTIFY_TO/ALARM_EMAIL_TO), skipping")
+        return
+    sg_key = os.environ.get("SENDGRID_API_KEY", "")
+    if not sg_key:
+        log.warning("send_paid_signup_email: SENDGRID_API_KEY not set, skipping")
+        return
+    from_addr = os.environ.get("ALARM_EMAIL_FROM", "hello@goodlie.golf")
+    html = (
+        f"<h2>New paid subscriber</h2>"
+        f"<p><strong>Email:</strong> {user_email}</p>"
+        f"<p><strong>Subscription ID:</strong> {stripe_subscription_id}</p>"
+        f"<p><strong>Amount:</strong> ${amount_cad:.2f} CAD/month</p>"
+        f"<p><strong>Time:</strong> {now_utc_iso}</p>"
+    )
+    try:
+        r = httpx.post(
+            "https://api.sendgrid.com/v3/mail/send",
+            headers={"Authorization": f"Bearer {sg_key}", "Content-Type": "application/json"},
+            json={
+                "personalizations": [{"to": [{"email": to}]}],
+                "from": {"email": from_addr, "name": "Good Lie"},
+                "subject": f"New paid subscriber: {user_email}",
+                "content": [{"type": "text/html", "value": html}],
+            },
+            timeout=15,
+        )
+        r.raise_for_status()
+    except Exception as exc:
+        log.error("send_paid_signup_email: failed user=%s — %s", user_email, exc)
+
+
 def send_free_tier_non_firing_expiry_email(to: str, alert_id: str, retry_link: str) -> None:
     """Sent when a free-tier alert hits date_to without ever firing.
     The user gets one chance to reset with a new date range — this email surfaces that."""
