@@ -9,7 +9,7 @@ from typing import Optional
 from fastapi import FastAPI, HTTPException, Header, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from app.routers import auth, alerts, billing, invites, admin, course_requests, activity, phone_verification
+from app.routers import auth, alerts, billing, invites, admin, course_requests, activity, phone_verification, courses
 from app.database import supabase, supabase_admin
 from app.config import settings
 from app.heartbeat_monitor import heartbeat_monitor_loop
@@ -50,6 +50,7 @@ app.include_router(admin.router)
 app.include_router(course_requests.router)
 app.include_router(activity.router)
 app.include_router(phone_verification.router)
+app.include_router(courses.router)
 
 # ── In-memory heartbeat store ──────────────────────────────────────────────────
 _heartbeat: dict = {"timestamp": None, "poll_count": None}
