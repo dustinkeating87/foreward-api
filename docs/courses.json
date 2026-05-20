@@ -1,0 +1,815 @@
+{
+  "generated_at": "2026-05-20T12:35:05Z",
+  "source_commit_shas": {
+    "foreward_api": "e0b78edc2dc52cf7390c1ec5137d056ae3617864",
+    "foreward_scraper": "41d7e7a8cb1027d00fcd3b9e14cc0c05a4c3cb32",
+    "foreward": "e539627761d188e5b1d7cdd2e8e335e5ab1c799c"
+  },
+  "courses": [
+    {
+      "key": "acton-golf-club",
+      "name": "Acton Golf Club",
+      "platform": "chronogolf",
+      "platform_id": "888",
+      "active": true
+    },
+    {
+      "key": "angus-glen-north",
+      "name": "Angus Glen Golf Club \u2013 North Course",
+      "platform": "golfnow",
+      "platform_id": "13826",
+      "active": true
+    },
+    {
+      "key": "angus-glen-golf-club-south-course",
+      "name": "Angus Glen Golf Club \u2013 South Course",
+      "platform": "chronogolf",
+      "platform_id": "1215",
+      "active": true
+    },
+    {
+      "key": "ayren-links-golf-club",
+      "name": "Ayren Links Golf Club",
+      "platform": "chronogolf",
+      "platform_id": "1196",
+      "active": true
+    },
+    {
+      "key": "ballantrae-golf-club",
+      "name": "Ballantrae Golf Club",
+      "platform": "chronogolf",
+      "platform_id": "1194",
+      "active": true
+    },
+    {
+      "key": "bantys-roost-golf-country-club",
+      "name": "Banty's Roost Golf & Country Club",
+      "platform": "golfnow",
+      "platform_id": "7124",
+      "active": true
+    },
+    {
+      "key": "bayview-golf-country-club",
+      "name": "Bayview Golf & Country Club",
+      "platform": "chronogolf",
+      "platform_id": "1212",
+      "active": true
+    },
+    {
+      "key": "beacon-hall-golf-club",
+      "name": "Beacon Hall Golf Club",
+      "platform": "chronogolf",
+      "platform_id": "1189",
+      "active": true
+    },
+    {
+      "key": "bloomington-downs-golf-club",
+      "name": "Bloomington Downs Golf Club",
+      "platform": "golfnow",
+      "platform_id": "6931",
+      "active": true
+    },
+    {
+      "key": "bowmanville-golf-country-club",
+      "name": "Bowmanville Golf & Country Club",
+      "platform": "chronogolf",
+      "platform_id": "1197",
+      "active": true
+    },
+    {
+      "key": "bradford-highlands-golf-club",
+      "name": "Bradford Highlands Golf Club",
+      "platform": "chronogolf",
+      "platform_id": "1296",
+      "active": true
+    },
+    {
+      "key": "braeben-golf-country-club-academy-course",
+      "name": "Braeben Golf & Country Club - Academy Course",
+      "platform": "golfnow",
+      "platform_id": "7835",
+      "active": true
+    },
+    {
+      "key": "braeben",
+      "name": "BraeBen Golf Course",
+      "platform": "golfnow",
+      "platform_id": "7834",
+      "active": true
+    },
+    {
+      "key": "brampton-golf-club",
+      "name": "Brampton Golf Club",
+      "platform": "chronogolf",
+      "platform_id": "1222",
+      "active": true
+    },
+    {
+      "key": "buncrana-golf-course-par-3",
+      "name": "Buncrana Golf Course - Par 3",
+      "platform": "golfnow",
+      "platform_id": "17718",
+      "active": true
+    },
+    {
+      "key": "bunker-hill-golf-club",
+      "name": "Bunker Hill Golf Club",
+      "platform": "chronogolf",
+      "platform_id": "22765",
+      "active": true
+    },
+    {
+      "key": "burlington-golf-country-club",
+      "name": "Burlington Golf & Country Club",
+      "platform": "chronogolf",
+      "platform_id": "1305",
+      "active": true
+    },
+    {
+      "key": "burlington-springs-golf-club",
+      "name": "Burlington Springs Golf Club",
+      "platform": "chronogolf",
+      "platform_id": "1306",
+      "active": true
+    },
+    {
+      "key": "bushwood",
+      "name": "Bushwood Golf Club",
+      "platform": "chronogolf",
+      "platform_id": "1524",
+      "active": true
+    },
+    {
+      "key": "caistorville-golf-club",
+      "name": "Caistorville Golf Club",
+      "platform": "golfnow",
+      "platform_id": "9962",
+      "active": true
+    },
+    {
+      "key": "camisle-golf-club",
+      "name": "Camisle Golf Club",
+      "platform": "chronogolf",
+      "platform_id": "1307",
+      "active": true
+    },
+    {
+      "key": "carlisle-golf-country-club-east",
+      "name": "Carlisle Golf & Country Club \u2013 East",
+      "platform": "chronogolf",
+      "platform_id": "1337",
+      "active": true
+    },
+    {
+      "key": "carlisle-golf-country-club-north",
+      "name": "Carlisle Golf & Country Club \u2013 North",
+      "platform": "chronogolf",
+      "platform_id": "19814",
+      "active": true
+    },
+    {
+      "key": "carlisle-golf-country-club-south",
+      "name": "Carlisle Golf & Country Club \u2013 South",
+      "platform": "chronogolf",
+      "platform_id": "1335",
+      "active": true
+    },
+    {
+      "key": "carrying-place-country-club",
+      "name": "Carrying Place Country Club",
+      "platform": "chronogolf",
+      "platform_id": "1484",
+      "active": true
+    },
+    {
+      "key": "centennial-park-golf-center-east-nine",
+      "name": "Centennial Park Golf Center \u2013 East Nine",
+      "platform": "chronogolf",
+      "platform_id": "1388",
+      "active": true
+    },
+    {
+      "key": "centennial-park-golf-center-north-nine",
+      "name": "Centennial Park Golf Center \u2013 North Nine",
+      "platform": "chronogolf",
+      "platform_id": "1390",
+      "active": true
+    },
+    {
+      "key": "centennial-park-golf-center-west-nine",
+      "name": "Centennial Park Golf Center \u2013 West Nine",
+      "platform": "chronogolf",
+      "platform_id": "1389",
+      "active": true
+    },
+    {
+      "key": "cherry-downs",
+      "name": "Cherry Downs",
+      "platform": "golfnow",
+      "platform_id": "13027",
+      "active": true
+    },
+    {
+      "key": "deer-creek-golf-club-short-course-9-holes",
+      "name": "Deer Creek Golf Club - Short Course - 9 Holes",
+      "platform": "golfnow",
+      "platform_id": "19558",
+      "active": true
+    },
+    {
+      "key": "deer-creek-golf-club-north-course",
+      "name": "Deer Creek Golf Club North Course",
+      "platform": "golfnow",
+      "platform_id": "14422",
+      "active": true
+    },
+    {
+      "key": "deer-creek-golf-club-south-course",
+      "name": "Deer Creek Golf Club South Course",
+      "platform": "golfnow",
+      "platform_id": "14423",
+      "active": true
+    },
+    {
+      "key": "deerfield-golf-club-on",
+      "name": "Deerfield Golf Club (ON)",
+      "platform": "golfnow",
+      "platform_id": "12335",
+      "active": true
+    },
+    {
+      "key": "dentonia-park",
+      "name": "Dentonia Park Golf Course",
+      "platform": "gtg",
+      "platform_id": "dentonia-park",
+      "active": true
+    },
+    {
+      "key": "don-valley",
+      "name": "Don Valley Golf Course",
+      "platform": "gtg",
+      "platform_id": "don-valley",
+      "active": true
+    },
+    {
+      "key": "dragons-fire-golf-club",
+      "name": "Dragon's Fire Golf Club",
+      "platform": "golfnow",
+      "platform_id": "7772",
+      "active": true
+    },
+    {
+      "key": "eagles-nest",
+      "name": "Eagles Nest Golf Club",
+      "platform": "golfnow",
+      "platform_id": "4885",
+      "active": true
+    },
+    {
+      "key": "east-wing-golf-course-cardinal-golf-club",
+      "name": "East Wing Golf Course - Cardinal Golf Club",
+      "platform": "golfnow",
+      "platform_id": "13390",
+      "active": true
+    },
+    {
+      "key": "flemingdon-park",
+      "name": "Flemingdon Park Golf Club",
+      "platform": "golfnow",
+      "platform_id": "12047",
+      "active": true
+    },
+    {
+      "key": "foxbridge-golf-course",
+      "name": "Foxbridge Golf Course",
+      "platform": "golfnow",
+      "platform_id": "9671",
+      "active": true
+    },
+    {
+      "key": "glen-abbey-golf-club",
+      "name": "Glen Abbey Golf Club",
+      "platform": "golfnow",
+      "platform_id": "13169",
+      "active": true
+    },
+    {
+      "key": "goreway-golf-club",
+      "name": "Goreway Golf Club",
+      "platform": "golfnow",
+      "platform_id": "8194",
+      "active": true
+    },
+    {
+      "key": "gull-river-golf-club",
+      "name": "Gull River Golf Club",
+      "platform": "golfnow",
+      "platform_id": "10445",
+      "active": true
+    },
+    {
+      "key": "harbour-view-golf-country-club",
+      "name": "Harbour View Golf & Country Club",
+      "platform": "golfnow",
+      "platform_id": "12433",
+      "active": true
+    },
+    {
+      "key": "harmony-creek-golf-centre",
+      "name": "Harmony Creek Golf Centre",
+      "platform": "golfnow",
+      "platform_id": "8458",
+      "active": true
+    },
+    {
+      "key": "hidden-lake-new-course",
+      "name": "Hidden Lake - New Course",
+      "platform": "golfnow",
+      "platform_id": "7150",
+      "active": true
+    },
+    {
+      "key": "hidden-lake-old-course",
+      "name": "Hidden Lake - Old Course",
+      "platform": "golfnow",
+      "platform_id": "4562",
+      "active": true
+    },
+    {
+      "key": "hornby-glen-golf-course",
+      "name": "Hornby Glen Golf Course",
+      "platform": "chronogolf",
+      "platform_id": "1457",
+      "active": true
+    },
+    {
+      "key": "humber-valley",
+      "name": "Humber Valley Golf Course",
+      "platform": "gtg",
+      "platform_id": "humber-valley",
+      "active": true
+    },
+    {
+      "key": "islington-golf-club",
+      "name": "Islington Golf Club",
+      "platform": "chronogolf",
+      "platform_id": "1468",
+      "active": true
+    },
+    {
+      "key": "kettle-creek-golf-course-cardinal-golf-club",
+      "name": "Kettle Creek Golf Course - Cardinal Golf Club",
+      "platform": "golfnow",
+      "platform_id": "13392",
+      "active": true
+    },
+    {
+      "key": "kirbylinks-golf-course",
+      "name": "Kirby Links Golf Course",
+      "platform": "chronogolf",
+      "platform_id": "24076",
+      "active": true
+    },
+    {
+      "key": "lakeridge-links",
+      "name": "Lakeridge Links Golf Club",
+      "platform": "chronogolf",
+      "platform_id": "1232",
+      "active": true
+    },
+    {
+      "key": "lakeview",
+      "name": "Lakeview Golf Course",
+      "platform": "golfnow",
+      "platform_id": "8409",
+      "active": true
+    },
+    {
+      "key": "lionhead-legends",
+      "name": "Lionhead Golf Club \u2013 Legends Course",
+      "platform": "chronogolf",
+      "platform_id": "1224",
+      "active": true
+    },
+    {
+      "key": "lowville-golf-club",
+      "name": "Lowville Golf Club",
+      "platform": "golfnow",
+      "platform_id": "4575",
+      "active": true
+    },
+    {
+      "key": "lowville-heights-golf-club",
+      "name": "Lowville Heights Golf Club",
+      "platform": "chronogolf",
+      "platform_id": "1309",
+      "active": true
+    },
+    {
+      "key": "lyndebrook-golf-club",
+      "name": "Lyndebrook Golf Club",
+      "platform": "chronogolf",
+      "platform_id": "1234",
+      "active": true
+    },
+    {
+      "key": "magna-golf-club",
+      "name": "Magna Golf Club",
+      "platform": "chronogolf",
+      "platform_id": "1193",
+      "active": true
+    },
+    {
+      "key": "mandarin-golf-country-club",
+      "name": "Mandarin Golf & Country Club",
+      "platform": "chronogolf",
+      "platform_id": "1527",
+      "active": true
+    },
+    {
+      "key": "maple-acres",
+      "name": "Maple Acres Golf Course",
+      "platform": "gtg",
+      "platform_id": "maple-acres",
+      "active": true
+    },
+    {
+      "key": "markham-green-golf-club",
+      "name": "Markham Green Golf Club",
+      "platform": "chronogolf",
+      "platform_id": "1528",
+      "active": true
+    },
+    {
+      "key": "markland-wood-country-club",
+      "name": "Markland Wood Country Club",
+      "platform": "chronogolf",
+      "platform_id": "1391",
+      "active": true
+    },
+    {
+      "key": "mill-run-golf-club-ontario",
+      "name": "Mill Run Golf Club",
+      "platform": "chronogolf",
+      "platform_id": "22881",
+      "active": true
+    },
+    {
+      "key": "mill-run-golf-club-highland-course",
+      "name": "Mill Run Golf Club - Highland Course",
+      "platform": "golfnow",
+      "platform_id": "7139",
+      "active": true
+    },
+    {
+      "key": "millcroft-golf-club",
+      "name": "Millcroft Golf Club",
+      "platform": "chronogolf",
+      "platform_id": "1310",
+      "active": true
+    },
+    {
+      "key": "mississaugua-golf-country-club",
+      "name": "Mississaugua Golf & Country Club",
+      "platform": "chronogolf",
+      "platform_id": "19582",
+      "active": true
+    },
+    {
+      "key": "mount-nemo-golf-club",
+      "name": "Mount Nemo Golf Club",
+      "platform": "golfnow",
+      "platform_id": "4565",
+      "active": true
+    },
+    {
+      "key": "mystic-golf-club",
+      "name": "Mystic Golf Club",
+      "platform": "golfnow",
+      "platform_id": "10143",
+      "active": true
+    },
+    {
+      "key": "nobleton-lakes-golf-club",
+      "name": "Nobleton Lakes Golf Club",
+      "platform": "golfnow",
+      "platform_id": "15140",
+      "active": true
+    },
+    {
+      "key": "north-halton-country-club",
+      "name": "North Halton Country Club",
+      "platform": "chronogolf",
+      "platform_id": "1418",
+      "active": true
+    },
+    {
+      "key": "oak-gables-golf-club-learning-centre",
+      "name": "Oak Gables Golf Club",
+      "platform": "chronogolf",
+      "platform_id": "1475",
+      "active": true
+    },
+    {
+      "key": "oshawa-airport-golf-club",
+      "name": "Oshawa Airport Golf Club",
+      "platform": "golfnow",
+      "platform_id": "10587",
+      "active": true
+    },
+    {
+      "key": "oshawa-golf-and-curling-club",
+      "name": "Oshawa Golf Club",
+      "platform": "chronogolf",
+      "platform_id": "23654",
+      "active": true
+    },
+    {
+      "key": "pebblestone-golf-course",
+      "name": "Pebblestone Golf Course",
+      "platform": "chronogolf",
+      "platform_id": "1360",
+      "active": true
+    },
+    {
+      "key": "peel-village-golf-course-9-holes",
+      "name": "Peel Village Golf Course - 9 Holes",
+      "platform": "golfnow",
+      "platform_id": "17665",
+      "active": true
+    },
+    {
+      "key": "pickering-glen",
+      "name": "Pickering Glen Golf Club",
+      "platform": "golfnow",
+      "platform_id": "14426",
+      "active": true
+    },
+    {
+      "key": "pickering-golf-club",
+      "name": "Pickering Golf Club",
+      "platform": "chronogolf",
+      "platform_id": "19685",
+      "active": true
+    },
+    {
+      "key": "redcrest-golf-course-cardinal-golf-club",
+      "name": "RedCrest Golf Course - Cardinal Golf Club",
+      "platform": "golfnow",
+      "platform_id": "13391",
+      "active": true
+    },
+    {
+      "key": "remington-upper",
+      "name": "Remington Parkview \u2013 Upper Course",
+      "platform": "golfnow",
+      "platform_id": "13008",
+      "active": true
+    },
+    {
+      "key": "remington-valley",
+      "name": "Remington Parkview \u2013 Valley Course",
+      "platform": "golfnow",
+      "platform_id": "13007",
+      "active": true
+    },
+    {
+      "key": "riverside-golf-club-ontario-ajax",
+      "name": "Riverside Golf Club",
+      "platform": "chronogolf",
+      "platform_id": "19719",
+      "active": true
+    },
+    {
+      "key": "riverstone-golf-and-country-club",
+      "name": "Riverstone Golf and Country Club",
+      "platform": "chronogolf",
+      "platform_id": "1229",
+      "active": true
+    },
+    {
+      "key": "riverstone-golf-course",
+      "name": "Riverstone Golf Course",
+      "platform": "chronogolf",
+      "platform_id": "1230",
+      "active": true
+    },
+    {
+      "key": "rolling-hills-bethesda-grange",
+      "name": "Rolling Hills - Bethesda Grange",
+      "platform": "golfnow",
+      "platform_id": "8138",
+      "active": true
+    },
+    {
+      "key": "royal-ashburn",
+      "name": "Royal Ashburn Golf Club",
+      "platform": "chronogolf",
+      "platform_id": "1185",
+      "active": true
+    },
+    {
+      "key": "royal-stouffville-executive",
+      "name": "Royal Stouffville Executive",
+      "platform": "golfnow",
+      "platform_id": "10186",
+      "active": true
+    },
+    {
+      "key": "royal-stouffville-golf-course",
+      "name": "Royal Stouffville Golf Course",
+      "platform": "golfnow",
+      "platform_id": "4576",
+      "active": true
+    },
+    {
+      "key": "royal-woodbine",
+      "name": "Royal Woodbine Golf Club",
+      "platform": "golfnow",
+      "platform_id": "4662",
+      "active": true
+    },
+    {
+      "key": "sandridge-dunes",
+      "name": "Sandridge Dunes (Vero Beach, FL)",
+      "platform": "golfnow",
+      "platform_id": "5223",
+      "active": true
+    },
+    {
+      "key": "sandridge-lakes",
+      "name": "Sandridge Lakes (Vero Beach, FL)",
+      "platform": "golfnow",
+      "platform_id": "6798",
+      "active": true
+    },
+    {
+      "key": "scarlett-woods",
+      "name": "Scarlett Woods Golf Course",
+      "platform": "gtg",
+      "platform_id": "scarlett-woods",
+      "active": true
+    },
+    {
+      "key": "shawneeki-golf-club",
+      "name": "Shawneeki Golf Club",
+      "platform": "golfnow",
+      "platform_id": "5647",
+      "active": true
+    },
+    {
+      "key": "silver-lakes",
+      "name": "Silver Lakes Golf & Country Club",
+      "platform": "chronogolf",
+      "platform_id": "22587",
+      "active": true
+    },
+    {
+      "key": "south-ajax-golf-club-lake-breeze",
+      "name": "South Ajax Golf Club - Lake Breeze",
+      "platform": "golfnow",
+      "platform_id": "18159",
+      "active": true
+    },
+    {
+      "key": "south-ajax-golf-club-whistling-wind",
+      "name": "South Ajax Golf Club - Whistling Wind",
+      "platform": "golfnow",
+      "platform_id": "18160",
+      "active": true
+    },
+    {
+      "key": "southern-pines-golf-and-country-club",
+      "name": "Southern Pines Golf and Country Club",
+      "platform": "golfnow",
+      "platform_id": "12418",
+      "active": true
+    },
+    {
+      "key": "spring-creek-golf-club",
+      "name": "Spring Creek Golf Club",
+      "platform": "golfnow",
+      "platform_id": "10408",
+      "active": true
+    },
+    {
+      "key": "st-andrews-valley-golf-club",
+      "name": "St. Andrew's Valley Golf Club",
+      "platform": "chronogolf",
+      "platform_id": "1188",
+      "active": true
+    },
+    {
+      "key": "summerlea-golf-club",
+      "name": "Summerlea Golf Club",
+      "platform": "chronogolf",
+      "platform_id": "21882",
+      "active": true
+    },
+    {
+      "key": "tam-o-shanter",
+      "name": "Tam O'Shanter Golf Course",
+      "platform": "gtg",
+      "platform_id": "tam-o-shanter",
+      "active": true
+    },
+    {
+      "key": "the-deer-creek-academy",
+      "name": "The Deer Creek Academy",
+      "platform": "chronogolf",
+      "platform_id": "887",
+      "active": true
+    },
+    {
+      "key": "osprey-heathlands",
+      "name": "TPC Toronto at Osprey Valley \u2013 Heathlands",
+      "platform": "chronogolf",
+      "platform_id": "22980",
+      "active": true
+    },
+    {
+      "key": "osprey-hoot",
+      "name": "TPC Toronto at Osprey Valley \u2013 Hoot Course",
+      "platform": "chronogolf",
+      "platform_id": "22978",
+      "active": true
+    },
+    {
+      "key": "osprey-north",
+      "name": "TPC Toronto at Osprey Valley \u2013 North Course",
+      "platform": "chronogolf",
+      "platform_id": "22979",
+      "active": true
+    },
+    {
+      "key": "turnberry-golf-club-ontario",
+      "name": "Turnberry Golf Club - Ontario",
+      "platform": "golfnow",
+      "platform_id": "4886",
+      "active": true
+    },
+    {
+      "key": "tyandaga-golf-course",
+      "name": "Tyandaga Golf Course",
+      "platform": "golfnow",
+      "platform_id": "6725",
+      "active": true
+    },
+    {
+      "key": "uplands-golf-club",
+      "name": "Uplands Golf Club",
+      "platform": "golfnow",
+      "platform_id": "7221",
+      "active": true
+    },
+    {
+      "key": "west-wing-golf-course-cardinal-golf-club",
+      "name": "West Wing Golf Course - Cardinal Golf Club",
+      "platform": "golfnow",
+      "platform_id": "13389",
+      "active": true
+    },
+    {
+      "key": "westview-golf-club-ontario-aurora-homestead",
+      "name": "Westview Golf Club \u2013 Homestead",
+      "platform": "chronogolf",
+      "platform_id": "26718",
+      "active": true
+    },
+    {
+      "key": "westview-golf-club-ontario-aurora-lakeland",
+      "name": "Westview Golf Club \u2013 Lakeland",
+      "platform": "chronogolf",
+      "platform_id": "26723",
+      "active": true
+    },
+    {
+      "key": "westview-golf-club-ontario-aurora-middle",
+      "name": "Westview Golf Club \u2013 Middle",
+      "platform": "chronogolf",
+      "platform_id": "26719",
+      "active": true
+    },
+    {
+      "key": "whispering-ridge",
+      "name": "Whispering Ridge Golf Club",
+      "platform": "chronogolf",
+      "platform_id": "1233",
+      "active": true
+    },
+    {
+      "key": "winchester",
+      "name": "Winchester Golf Club",
+      "platform": "golfnow",
+      "platform_id": "6886",
+      "active": true
+    },
+    {
+      "key": "wooden-sticks-golf-club",
+      "name": "Wooden Sticks Golf Club",
+      "platform": "golfnow",
+      "platform_id": "18131",
+      "active": true
+    }
+  ]
+}
