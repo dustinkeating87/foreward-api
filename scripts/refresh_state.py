@@ -529,15 +529,17 @@ def main() -> None:
         if not gtg_raw:
             raise RuntimeError("GTG_COURSES returned 0 courses — aborting.")
 
-        # Parse frontend
-        ts_source = Path(os.path.join(frontend_dir, "src", "lib", "courses.ts")).read_text()
-        gta_frontend, by_request_frontend = extract_frontend_courses(ts_source)
-
-        total_frontend = len(gta_frontend) + len(by_request_frontend)
-        print(f"Frontend parsed: {total_frontend} courses found in src/lib/courses.ts")
-
-        if not gta_frontend and not by_request_frontend:
-            raise RuntimeError("Frontend courses.ts returned 0 courses — aborting.")
+        # Picker is API-driven (useCourses hook fetches /courses); courses.json is the source of truth.
+        # We no longer parse courses.ts — it's a backward-compat shim for Landing.tsx, not the picker.
+        if not COURSES_JSON.exists():
+            raise RuntimeError("docs/courses.json not found — run scripts/refresh_state.py to generate.")
+        courses_json_data = json.loads(COURSES_JSON.read_text())
+        gta_frontend = [
+            {"key": c["key"], "label": c["name"], "region": "GTA"}
+            for c in courses_json_data["courses"]
+        ]
+        by_request_frontend = []
+        print(f"Frontend (API-driven via courses.json): {len(gta_frontend)} courses")
 
         # Normalize and annotate with platform status
         all_scraper = apply_platform_status(
@@ -552,7 +554,7 @@ def main() -> None:
             subset = [c for c in all_scraper if c["platform"] == p]
             eff = sum(1 for c in subset if c["effective_active"])
             print(f"  {label}: {len(subset)} total  ({eff} effective active)")
-        print(f"  Frontend: {len(gta_frontend)} GTA + {len(by_request_frontend)} by-request")
+        print(f"  Frontend (from courses.json): {len(gta_frontend)}")
 
         sections = {
             "headline_counts": gen_headline_counts(
