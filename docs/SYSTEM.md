@@ -153,6 +153,31 @@ Updates to this section happen via the ClickUp queue (list `901327295790`), drai
 
 Bar for an entry: **something actioned changed in the world.** Code shipped, config flipped, schema migrated, bug filed, locked-in commitment made. Pure deliberation does not get logged.
 
+### 2026-05-23 (s2) — GTG: cf_clearance lasts ~1yr; manual-clearance + cookie-reuse is lead path
+
+Continuation of GTG PAT investigation (ClickUp 86ahnnyda full record, 86ahnpnt4 full record). GTG cold-start login blocked at Cloudflare PAT device attestation; multiple approaches confirmed-closed (PAT-passing via Chromium, token injection, window.turnstile reach-in, postMessage forge, DOM side channels — see 86ahnnyda, do not re-attempt). This session pivoted to cookie reuse as the lead path.
+
+Key findings from direct DevTools observation:
+- Manual real Safari passes the Cloudflare/Turnstile wall trivially (auto-pass, no interaction).
+- Manual Chrome ALSO currently holds a logged-in GTG session — contradicts the prior "Chrome always gets 401" framing; flagged unresolved (may have logged in during a working window or session predates May redeploy).
+- Automated Safari (safaridriver) did NOT pass in 2 attempts, but BOTH runs were inconclusive due to probe timing bugs (script checked for the Turnstile iframe before the Angular SPA rendered it). Do NOT record "automated Safari fails" as fact.
+- cf_clearance cookie expires 2027-05-21 — ~ONE YEAR. Overturns the prior "GTG sessions expire fast" assumption. Once a human clears Turnstile, the Cloudflare gate stays open ~1yr on that browser/IP/UA.
+- No app auth token in localStorage (only app state/prefs). GTG login lives in an HttpOnly cookie or IndexedDB/Session storage — not yet located.
+
+Revised lead hypothesis: worker's production failure = missing cf_clearance (the /pat/ 401 is the Cloudflare gate, not the app login). Hand the worker a valid cf_clearance → it may pass the gate → then log in with GTG creds it already has. Cost ~$0, re-paste ~1x/year. Critical untested risk: cf_clearance is IP+UA-bound; cookie minted on Dustin's home IP may be rejected from worker's proxy/datacenter egress. Next action: test cf_clearance transfer in foreward-scraper.
+
+Paid options ruled out at current user count: cloud-Mac ($60–150/mo) and managed unblockers ($30–130/mo) exceed <$15/mo ceiling. GTG is non-negotiable for the product (5 flagship courses). Manual touch tolerance: a few min every few days.
+
+Tooling lesson: Claude Code introduced a Py3.10+ syntax regression mid-session (tuple|None syntax on Python 3.9). Fixed via `from __future__ import annotations`. Code to smoke-test imports before handback going forward.
+
+### 2026-05-21 — Process gap filed: stateful work done outside chat sessions is invisible
+
+Filed ClickUp 86ahmctj5. 80+ courses were added to the scraper across multiple sessions between late April and May 21 without generating a chat session or decision-log entry. Result: Claude confidently cited "22 courses" while the actual number was ~106. Problem: the session-start protocol has no mechanism to surface deltas from work done outside chat. Options: (a) live Supabase query for course count at session start when marketing/coverage claims are involved; (b) "what's happened since last chat" delta step surfacing commits, new courses, env vars; (c) other. Not fixing today — to be addressed in a planning session when there's bandwidth for process work.
+
+### 2026-05-21 — foreward CLAUDE.md pointer: needs update to SYSTEM.md (deferred)
+
+The foreward (Lovable frontend) repo's CLAUDE.md referenced the stale `~/Documents/Claude/Projects/Good Lie Golf/ARCHITECTURE.md` path. Intent (queued as 86ahma82e): update foreward/CLAUDE.md to point to the canonical SYSTEM.md GitHub raw URL. At drain time (2026-05-24) no CLAUDE.md was found in foreward-frontend/ — the edit was never done and the file doesn't exist. To resolve: create a CLAUDE.md in the foreward-frontend repo pointing to the SYSTEM.md raw URL. Lesson: cross-repo doc pointers are a hidden drift surface; always use GitHub raw URLs, not local filesystem paths.
+
 ### 2026-05-21 — SYSTEM.md surgery: ARCHITECTURE.md format retired
 
 Replaced ARCHITECTURE.md (~600 lines, accumulated 18 days of state-drift across multiple sessions) with this SYSTEM.md (~250 lines). Removed: full schema dump, per-service env var lists, "live state" snapshots, API surface enumeration, "outstanding ClickUp tasks" snapshot, "known issues" list. Kept: brand history, stack table, routing rule, conceptual data flow, failure modes umbrella, locked product decisions, decision log.
