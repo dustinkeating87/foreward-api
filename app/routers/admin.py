@@ -74,6 +74,7 @@ async def scraper_heartbeat(request: Request):
         "id": 1,
         "last_heartbeat": datetime.now(timezone.utc).isoformat(),
         "last_poll": poll_number,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
     }
 
     if "slots_per_platform" in body:

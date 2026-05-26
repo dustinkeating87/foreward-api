@@ -1,9 +1,9 @@
 import asyncio
 import logging
 import os
-import time
 import smtplib
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from email.mime.text import MIMEText
 from typing import Optional
 from fastapi import FastAPI, HTTPException, Header, Query
@@ -14,6 +14,7 @@ from app.database import supabase, supabase_admin
 from app.config import settings
 from app.heartbeat_monitor import heartbeat_monitor_loop
 from app.idle_nudge import idle_nudge_loop
+from app.util.dates import _parse_iso
 import httpx
 
 log = logging.getLogger(__name__)
@@ -59,10 +60,6 @@ app.include_router(activity.router)
 app.include_router(phone_verification.router)
 app.include_router(courses.router)
 
-# ── In-memory heartbeat store ──────────────────────────────────────────────────
-_heartbeat: dict = {"timestamp": None, "poll_count": None}
-
-
 def _require_api_key(x_api_key: Optional[str]):
     if not settings.export_api_key or x_api_key != settings.export_api_key:
         raise HTTPException(status_code=403, detail="Invalid API key")
@@ -72,27 +69,30 @@ def _require_api_key(x_api_key: Optional[str]):
 
 @app.get("/health")
 def health():
-    result: dict = {"status": "ok"}
-    if _heartbeat["timestamp"] is not None:
-        result["last_heartbeat"] = _heartbeat["timestamp"]
-        result["seconds_ago"] = int(time.time() - _heartbeat["timestamp"])
-        result["poll_count"] = _heartbeat["poll_count"]
-    return result
+    try:
+        row = supabase_admin.table("scraper_health").select(
+            "last_heartbeat, last_poll, slots_last_poll"
+        ).eq("id", 1).maybe_single().execute()
+        data = row.data or {}
+    except Exception:
+        return {"status": "ok", "scraper": "unavailable"}
 
+    last_heartbeat = data.get("last_heartbeat")
+    if last_heartbeat:
+        seconds_ago = int((datetime.now(timezone.utc) - _parse_iso(last_heartbeat)).total_seconds())
+        scraper_healthy = seconds_ago < 300
+    else:
+        seconds_ago = None
+        scraper_healthy = False
 
-# ── Scraper heartbeat ──────────────────────────────────────────────────────────
-
-class HeartbeatBody(BaseModel):
-    timestamp: float
-    poll_count: int
-
-
-@app.post("/scraper-heartbeat", status_code=200)
-def scraper_heartbeat(body: HeartbeatBody, x_api_key: Optional[str] = Header(default=None)):
-    _require_api_key(x_api_key)
-    _heartbeat["timestamp"] = body.timestamp
-    _heartbeat["poll_count"] = body.poll_count
-    return {"received": True}
+    return {
+        "status": "ok",
+        "scraper_healthy": scraper_healthy,
+        "last_heartbeat": last_heartbeat,
+        "seconds_ago": seconds_ago,
+        "last_poll_number": data.get("last_poll"),
+        "slots_last_poll": data.get("slots_last_poll"),
+    }
 
 
 # ── Test notification ──────────────────────────────────────────────────────────
