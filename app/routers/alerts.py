@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException, Depends, Query
 from app.config import settings
 from app.database import supabase_admin
 from app.dependencies import get_current_user, get_current_user_with_profile
-from app.email import send_free_tier_signup_email
+from app.email import send_free_tier_signup_email, send_paywall_email
 from app.schemas import AlertProfileCreate, AlertProfileUpdate
 
 router = APIRouter(tags=["alerts"])
@@ -109,6 +109,16 @@ def create_alert(body: AlertProfileCreate, ctx=Depends(get_current_user_with_pro
 
     # User has used their first free alert — check grace retry eligibility
     if profile.get("free_tier_grace_retry_used_at") is not None:
+        if profile.get("paywall_email_sent_at") is None:
+            try:
+                to = profile.get("notify_email") or profile.get("email") or ctx["user"].email
+                if to:
+                    send_paywall_email(to)
+                    supabase_admin.table("user_profiles").update({
+                        "paywall_email_sent_at": now.isoformat(),
+                    }).eq("id", user_id).execute()
+            except Exception as _e:
+                log.error("paywall email failed user=%s: %s", user_id[:8], _e)
         raise HTTPException(status_code=402, detail="Payment required to create alerts")
 
     prior_result = (

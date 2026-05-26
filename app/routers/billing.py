@@ -34,7 +34,7 @@ def create_checkout_session(body: CheckoutSessionRequest, current_user=Depends(g
             payment_method_types=["card"],
             line_items=[{"price": settings.stripe_price_id, "quantity": 1}],
             mode="subscription",
-            subscription_data={"trial_period_days": 7},
+            subscription_data={"trial_period_days": 30},
             success_url=settings.success_url + "?session_id={CHECKOUT_SESSION_ID}",
             cancel_url=settings.cancel_url,
             metadata={"supabase_user_id": str(current_user.id)},

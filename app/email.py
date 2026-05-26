@@ -207,6 +207,21 @@ def send_idle_nudge_email(to: str) -> None:
     )
 
 
+def send_paywall_email(to: str) -> None:
+    """Sent once when a free-tier user exhausts both their free alert and grace retry (hits the 402 wall)."""
+    send_email(
+        to,
+        "That course just isn't into you",
+        (
+            "Tough one to deliver, but that course just isn't into you. We played matchmaker as hard as we know how, "
+            "and it still gave you nothing. Twice.\n\n"
+            "So here's our consolation prize: a full month on us. We'll watch up to 10 courses at once and grab the "
+            "second anything opens. Cancel anytime, no hard feelings, we're used to rejection by now.\n\n"
+            "Start my free month: https://goodlie.golf/subscribe"
+        ),
+    )
+
+
 def send_free_tier_non_firing_expiry_email(to: str, alert_id: str, retry_link: str, course_name: str = "the course") -> None:
     """Sent when a free-tier alert hits date_to without ever firing."""
     send_email(
