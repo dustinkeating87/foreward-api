@@ -218,6 +218,7 @@ def export_alerts(
             "time_to": row["time_to"],
             "players": row["players"],
             "holes": row["holes"],
+            "is_free_tier": row.get("is_free_tier", False),
         })
 
     return export
@@ -287,8 +288,9 @@ def expire_stale_alerts(x_api_key: Optional[str] = Header(default=None)):
         user = user_result.data or {}
         if user.get("notify_email") and user.get("free_tier_grace_retry_used_at") is None:
             retry_link = f"{settings.frontend_url}/dashboard?retry_free_tier=1"
+            course_name = (alert.get("courses") or ["the course"])[0]
             try:
-                send_free_tier_non_firing_expiry_email(user["notify_email"], alert["id"], retry_link)
+                send_free_tier_non_firing_expiry_email(user["notify_email"], alert["id"], retry_link, course_name)
             except Exception:
                 log.error("non_firing_expiry_email: failed alert=%s", alert["id"])
 

@@ -188,19 +188,15 @@ def send_paid_signup_email(user_email: str, stripe_subscription_id: str, amount_
         log.error("send_paid_signup_email: failed user=%s — %s", user_email, exc)
 
 
-def send_free_tier_non_firing_expiry_email(to: str, alert_id: str, retry_link: str) -> None:
-    """Sent when a free-tier alert hits date_to without ever firing.
-    The user gets one chance to reset with a new date range — this email surfaces that."""
+def send_free_tier_non_firing_expiry_email(to: str, alert_id: str, retry_link: str, course_name: str = "the course") -> None:
+    """Sent when a free-tier alert hits date_to without ever firing."""
     send_email(
         to,
-        "Your Good Lie alert ran out — try again on us",
+        "That course played hard to get",
         (
-            f"Your free Good Lie alert just expired without finding a tee time.\n\n"
-            f"That's not the demo we promised. Here's a one-time retry — set a new date range "
-            f"and we'll keep watching:\n\n"
-            f"{retry_link}\n\n"
-            f"This is your last shot on the free tier. After this, you'll need to subscribe "
-            f"to keep getting alerts.\n\n"
-            f"— Good Lie"
+            f"{course_name} wasn't ready to compromise. {course_name} showed you nothing for the entire window, not one slot. "
+            f"We mean this: it's not you, it's the course. To make it up to you, here's a fresh alert on the house. "
+            f"Keep chasing this one, or point it at a few others and play the field a little.\n\n"
+            f"Set up another free alert: {retry_link}"
         ),
     )
