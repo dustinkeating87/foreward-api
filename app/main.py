@@ -13,6 +13,7 @@ from app.routers import auth, alerts, billing, invites, admin, course_requests, 
 from app.database import supabase, supabase_admin
 from app.config import settings
 from app.heartbeat_monitor import heartbeat_monitor_loop
+from app.idle_nudge import idle_nudge_loop
 import httpx
 
 log = logging.getLogger(__name__)
@@ -23,12 +24,18 @@ async def lifespan(app):
     app.state.ip_rate_limit = {}
     app.state.phone_rate_limit = {}
     heartbeat_task = asyncio.create_task(heartbeat_monitor_loop())
+    nudge_task = asyncio.create_task(idle_nudge_loop())
     try:
         yield
     finally:
         heartbeat_task.cancel()
+        nudge_task.cancel()
         try:
             await heartbeat_task
+        except asyncio.CancelledError:
+            pass
+        try:
+            await nudge_task
         except asyncio.CancelledError:
             pass
 

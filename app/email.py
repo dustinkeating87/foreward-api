@@ -188,6 +188,25 @@ def send_paid_signup_email(user_email: str, stripe_subscription_id: str, amount_
         log.error("send_paid_signup_email: failed user=%s — %s", user_email, exc)
 
 
+def send_idle_nudge_email(to: str) -> None:
+    """One-time nudge to users who signed up but never created an alert."""
+    send_email(
+        to,
+        "Hey, it's Good Lie",
+        (
+            "Hey, it's Good Lie!\n\n"
+            "Once upon a time you signed up for us, so we know somewhere in there is a golfer trying to get a tee time they really want.\n\n"
+            "Good news: that's our thing!\n\n"
+            "Bad news: you still haven't told us which course you want to play...\n\n"
+            "That's all you've got to do. The first one's on us, totally free. If you don't like it, we never speak of this again. "
+            "If you like it, we can talk about making this official. But for now, you owe us nothing.\n\n"
+            "And if you're over it, all good. We'll leave you alone after this, but not before giving you one last shot at "
+            "breaking into whatever course you've been trying to get into.\n\n"
+            "Set up my first alert: https://goodlie.golf/alerts/new"
+        ),
+    )
+
+
 def send_free_tier_non_firing_expiry_email(to: str, alert_id: str, retry_link: str, course_name: str = "the course") -> None:
     """Sent when a free-tier alert hits date_to without ever firing."""
     send_email(
