@@ -17,14 +17,21 @@ router = APIRouter(tags=["admin"])
 log = logging.getLogger(__name__)
 
 ADMIN_EMAILS = ["dustinkeating87@gmail.com"]
-ALERTING_PLATFORMS = ["gtg", "golfnow", "chronogolf"]
-ZERO_STREAK_THRESHOLD = 10
 PLATFORM_GUIDANCE = {
     "lakeview": "The Lakeview cookie has likely expired. Log in to the scraper dashboard and refresh the session cookie.",
     "gtg": "Check 2captcha balance and account health. Low credits or a banned account will cause silent failures.",
     "golfnow": "Check worker logs and proxy health. GolfNow scraper may be blocked or the proxy pool exhausted.",
 }
 DEFAULT_GUIDANCE = "Check Railway worker logs for errors or restart the worker."
+
+
+def _platform_status(streak: int, threshold: int) -> str:
+    """Single source of truth: per-platform health verdict from a zero-poll streak."""
+    if streak >= threshold:
+        return "down"
+    if streak > 0:
+        return "warning"
+    return "healthy"
 
 
 def require_admin(current_user=Depends(get_current_user)):
@@ -102,8 +109,10 @@ async def scraper_heartbeat(request: Request):
     for platform in all_platforms:
         prev_count = int(prev_streaks.get(platform) or 0)
         new_count = int(new_streaks.get(platform) or 0)
+        prev_status = _platform_status(prev_count, threshold)
+        new_status = _platform_status(new_count, threshold)
         try:
-            if prev_count < threshold and new_count >= threshold:
+            if prev_status != "down" and new_status == "down":
                 guidance = PLATFORM_GUIDANCE.get(platform, DEFAULT_GUIDANCE)
                 subject = f"[Good Lie] {platform.upper()} silent for {new_count} polls (about {new_count} min)"
                 lines = [
@@ -120,7 +129,7 @@ async def scraper_heartbeat(request: Request):
                 ]
                 send_email(alarm_to, subject, "\n".join(lines), from_addr=alarm_from)
                 log.info("alarm email sent for platform=%s streak=%d", platform, new_count)
-            elif prev_count >= threshold and new_count == 0:
+            elif prev_status == "down" and new_status == "healthy":
                 subject = f"[Good Lie] {platform.upper()} recovered"
                 body_text = f"{platform} is producing slots again."
                 send_email(alarm_to, subject, body_text, from_addr=alarm_from)
@@ -164,6 +173,8 @@ async def scraper_heartbeat(request: Request):
 
 
 def _compute_health(health: dict) -> dict:
+    threshold = int(os.environ.get("ALARM_THRESHOLD_POLLS", "10"))
+
     last_heartbeat = health.get("last_heartbeat")
     if last_heartbeat:
         # Python 3.9 compat: see app/util/dates.py
@@ -175,20 +186,35 @@ def _compute_health(health: dict) -> dict:
         is_healthy = False
 
     consecutive = health.get("consecutive_zero_polls") or {}
-    platform_alarms = [
-        p for p in ALERTING_PLATFORMS
-        if (consecutive.get(p) or 0) >= ZERO_STREAK_THRESHOLD
-    ]
+    slots = health.get("slots_last_poll") or {}
+
+    platforms: dict = {}
+    for p in sorted(set(consecutive.keys()) | set(slots.keys())):
+        streak = int(consecutive.get(p) or 0)
+        platforms[p] = {
+            "status": _platform_status(streak, threshold),
+            "consecutive_zero_polls": streak,
+            "slots_last_poll": slots.get(p),
+        }
+
+    statuses = [v["status"] for v in platforms.values()]
+    if "down" in statuses:
+        overall_verdict = "down"
+    elif "warning" in statuses:
+        overall_verdict = "warning"
+    else:
+        overall_verdict = "healthy"
 
     return {
         "is_healthy": is_healthy,
         "last_heartbeat": last_heartbeat,
         "last_poll_number": health.get("last_poll"),
         "minutes_ago": round(minutes_ago, 1) if minutes_ago is not None else None,
-        "slots_last_poll": health.get("slots_last_poll"),
-        "consecutive_zero_polls": health.get("consecutive_zero_polls"),
         "last_productive_poll": health.get("last_productive_poll"),
-        "platform_alarms": platform_alarms,
+        "sitekey_fallback_active": bool(health.get("sitekey_fallback_active", False)),
+        "captcha_balance": health.get("captcha_balance"),
+        "platforms": platforms,
+        "overall_verdict": overall_verdict,
     }
 
 
