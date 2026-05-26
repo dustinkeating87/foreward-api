@@ -47,14 +47,13 @@ async def run_idle_nudge() -> None:
                 log.info("idle_nudge: skipping user %s — no reachable email", user["id"])
                 continue
             try:
-                # Stamp first so a restart never double-sends
+                await asyncio.to_thread(lambda addr=to: send_idle_nudge_email(addr))
                 await asyncio.to_thread(
                     lambda uid=user["id"]: supabase_admin.table("user_profiles")
                         .update({"idle_nudge_sent_at": now_iso})
                         .eq("id", uid)
                         .execute()
                 )
-                await asyncio.to_thread(lambda addr=to: send_idle_nudge_email(addr))
                 log.info("idle_nudge: sent to user %s", user["id"])
             except Exception:
                 log.exception("idle_nudge: failed for user %s", user["id"])
@@ -63,6 +62,7 @@ async def run_idle_nudge() -> None:
 
 
 async def idle_nudge_loop() -> None:
+    await run_idle_nudge()
     while True:
         try:
             await asyncio.sleep(LOOP_INTERVAL_SECONDS)
