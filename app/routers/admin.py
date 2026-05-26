@@ -183,7 +183,7 @@ def _compute_health(health: dict) -> dict:
     return {
         "is_healthy": is_healthy,
         "last_heartbeat": last_heartbeat,
-        "last_poll": health.get("last_poll"),
+        "last_poll_number": health.get("last_poll"),
         "minutes_ago": round(minutes_ago, 1) if minutes_ago is not None else None,
         "slots_last_poll": health.get("slots_last_poll"),
         "consecutive_zero_polls": health.get("consecutive_zero_polls"),
