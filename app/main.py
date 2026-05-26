@@ -195,7 +195,7 @@ def export_alerts(
     user_ids = list({row["user_id"] for row in alerts_result.data or [] if row.get("user_id")})
     profiles_map = {}
     if user_ids:
-        profiles_result = supabase_admin.table("user_profiles").select("id, notify_email, notify_phone").in_("id", user_ids).execute()
+        profiles_result = supabase_admin.table("user_profiles").select("id, notify_email, notify_phone, is_active").in_("id", user_ids).execute()
         for p in profiles_result.data or []:
             profiles_map[p["id"]] = p
 
@@ -219,6 +219,7 @@ def export_alerts(
             "players": row["players"],
             "holes": row["holes"],
             "is_free_tier": row.get("is_free_tier", False),
+            "user_is_paid": bool(profile.get("is_active")),
         })
 
     return export
