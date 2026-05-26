@@ -88,6 +88,8 @@ async def scraper_heartbeat(request: Request):
             upsert_data["captcha_balance"] = float(cb) if cb is not None else None
         except (ValueError, TypeError) as exc:
             log.warning("invalid captcha_balance in heartbeat: %s", exc)
+    if "sitekey_fallback" in body:
+        upsert_data["sitekey_fallback_active"] = bool(body["sitekey_fallback"])
 
     supabase_admin.table("scraper_health").upsert(upsert_data).execute()
 
@@ -124,6 +126,33 @@ async def scraper_heartbeat(request: Request):
                 log.info("recovery email sent for platform=%s", platform)
         except Exception as exc:
             log.error("heartbeat email failed for platform=%s: %s", platform, exc)
+
+    if "sitekey_fallback" in body:
+        new_fallback = bool(body["sitekey_fallback"])
+        prev_fallback = bool(prev_data.get("sitekey_fallback_active", False))
+        try:
+            if not prev_fallback and new_fallback:
+                send_email(
+                    alarm_to,
+                    "[Good Lie] GTG sitekey fallback active",
+                    (
+                        "The GTG live sitekey scrape failed. The hardcoded fallback key is now in use.\n\n"
+                        "If GTG slot counts drop to 0, the fallback key has likely rotated.\n\n"
+                        f"Admin dashboard: {admin_url}"
+                    ),
+                    from_addr=alarm_from,
+                )
+                log.info("sitekey fallback alarm sent")
+            elif prev_fallback and not new_fallback:
+                send_email(
+                    alarm_to,
+                    "[Good Lie] GTG sitekey recovered",
+                    "GTG live sitekey extraction is working again. Fallback key is no longer in use.",
+                    from_addr=alarm_from,
+                )
+                log.info("sitekey recovery email sent")
+        except Exception as exc:
+            log.error("sitekey alarm email failed: %s", exc)
 
     try:
         await maybe_check_and_alert(supabase_admin)
