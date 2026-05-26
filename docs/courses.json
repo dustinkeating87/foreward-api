@@ -1,8 +1,8 @@
 {
-  "generated_at": "2026-05-25T19:19:47Z",
+  "generated_at": "2026-05-26T12:53:21Z",
   "source_commit_shas": {
-    "foreward_api": "135392cb9e36ea1bfcd37a88d47ad69dc6a4948b",
-    "foreward_scraper": "6a44a8fc893de677024d8c2a750aef7ec7459bf4",
+    "foreward_api": "d94b790ce43170501655256aaf5fb06e0f686a56",
+    "foreward_scraper": "f98907d20a511321c9da15780af402fbff1251a2",
     "foreward": "22a5849a5af7e13caa6cb7580f3bfb799fed8a56"
   },
   "courses": [
