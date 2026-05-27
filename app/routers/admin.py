@@ -99,7 +99,8 @@ async def scraper_heartbeat(request: Request):
     if "sitekey_fallback" in body:
         upsert_data["sitekey_fallback_active"] = bool(body["sitekey_fallback"])
     if "gtg_scrape_success" in body:
-        upsert_data["gtg_scrape_success"] = bool(body["gtg_scrape_success"])
+        _gss = body["gtg_scrape_success"]
+        upsert_data["gtg_scrape_success"] = None if _gss is None else bool(_gss)
 
     supabase_admin.table("scraper_health").upsert(upsert_data).execute()
 
