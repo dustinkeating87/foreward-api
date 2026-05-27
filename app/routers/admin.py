@@ -24,6 +24,69 @@ PLATFORM_GUIDANCE = {
 }
 DEFAULT_GUIDANCE = "Check Railway worker logs for errors or restart the worker."
 
+OPERATOR_SMS_TO_DEFAULT = "+16472819897"
+
+
+def _send_operator_sms(to: str, platform: str, streak: int, health_data: dict) -> None:
+    """Send an existential-tier SMS alert to the operator via Twilio."""
+    sid   = os.environ.get("TWILIO_SID", "")
+    token = os.environ.get("TWILIO_TOKEN", "")
+    frm   = os.environ.get("TWILIO_FROM", "")
+    if not (sid and token and frm):
+        log.warning("operator SMS skipped — TWILIO_SID/TWILIO_TOKEN/TWILIO_FROM not set")
+        return
+    hints = []
+    if health_data.get("sitekey_fallback_active"):
+        hints.append("sitekey_fallback=active")
+    cb = health_data.get("captcha_balance")
+    if cb is not None:
+        hints.append(f"captcha=${cb:.2f}")
+    hint_line = (", ".join(hints) + "\n") if hints else ""
+    guidance  = PLATFORM_GUIDANCE.get(platform, DEFAULT_GUIDANCE)
+    msg = (
+        f"[GoodLie] {platform.upper()} DOWN — {streak} consecutive failed polls.\n"
+        f"{hint_line}"
+        f"{guidance}"
+    )
+    r = httpx.post(
+        f"https://api.twilio.com/2010-04-01/Accounts/{sid}/Messages.json",
+        auth=(sid, token),
+        data={"From": frm, "To": to, "Body": msg},
+        timeout=15,
+    )
+    r.raise_for_status()
+
+
+def _compute_platform_alarm_actions(
+    prev_streaks: dict,
+    new_streaks: dict,
+    prev_alarm_active: dict,
+    threshold: int,
+    enabled: bool,
+) -> tuple:
+    """Pure function — returns (new_alarm_active_dict, actions_list).
+
+    actions_list items: ("sms_alarm", platform, streak) or ("email_recovery", platform, None).
+    CAS guarantee: sms_alarm only fires when alarm transitions False→True;
+    email_recovery only fires when alarm transitions True→False.
+    """
+    new_alarm_active = dict(prev_alarm_active)
+    actions: list = []
+    all_platforms = set(prev_streaks.keys()) | set(new_streaks.keys())
+    for platform in sorted(all_platforms):  # sorted for deterministic test order
+        prev_count   = int(prev_streaks.get(platform) or 0)
+        new_count    = int(new_streaks.get(platform) or 0)
+        was_alarming = bool(prev_alarm_active.get(platform, False))
+
+        if enabled and not was_alarming and prev_count < threshold and new_count >= threshold:
+            new_alarm_active[platform] = True
+            actions.append(("sms_alarm", platform, new_count))
+        elif was_alarming and new_count == 0:
+            new_alarm_active[platform] = False
+            actions.append(("email_recovery", platform, None))
+
+    return new_alarm_active, actions
+
 
 def _platform_status(streak: int, threshold: int) -> str:
     """Single source of truth: per-platform health verdict from a zero-poll streak."""
@@ -69,19 +132,23 @@ async def scraper_heartbeat(request: Request):
     body = await request.json()
     poll_number = body.get("poll_count") or body.get("poll", 0)
 
-    threshold = int(os.environ.get("ALARM_THRESHOLD_POLLS", "10"))
-    alarm_to = os.environ.get("ALARM_EMAIL_TO", "hello@goodlie.golf")
-    alarm_from = os.environ.get("ALARM_EMAIL_FROM", "hello@goodlie.golf")
+    pp_threshold    = int(os.environ.get("PER_PLATFORM_ALARM_THRESHOLD", "10"))
+    pp_enabled      = os.environ.get("PER_PLATFORM_ALARM_ENABLED", "true").lower() != "false"
+    operator_sms_to = os.environ.get("OPERATOR_SMS_TO", OPERATOR_SMS_TO_DEFAULT)
+    alarm_to        = os.environ.get("ALARM_EMAIL_TO", "hello@goodlie.golf")
+    alarm_from      = os.environ.get("ALARM_EMAIL_FROM", "hello@goodlie.golf")
 
-    prev_result = supabase_admin.table("scraper_health").select("*").eq("id", 1).maybe_single().execute()
-    prev_data = prev_result.data or {}
+    prev_result        = supabase_admin.table("scraper_health").select("*").eq("id", 1).maybe_single().execute()
+    prev_data          = prev_result.data or {}
     prev_streaks: dict = prev_data.get("consecutive_zero_polls") or {}
+    prev_alarm_active  = prev_data.get("per_platform_alarm_active") or {}
 
+    now_iso = datetime.now(timezone.utc).isoformat()
     upsert_data = {
-        "id": 1,
-        "last_heartbeat": datetime.now(timezone.utc).isoformat(),
-        "last_poll": poll_number,
-        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "id":             1,
+        "last_heartbeat": now_iso,
+        "last_poll":      poll_number,
+        "updated_at":     now_iso,
     }
 
     if "slots_per_platform" in body:
@@ -89,7 +156,7 @@ async def scraper_heartbeat(request: Request):
     if "consecutive_zero_polls" in body:
         upsert_data["consecutive_zero_polls"] = body["consecutive_zero_polls"]
     if body.get("is_productive"):
-        upsert_data["last_productive_poll"] = datetime.now(timezone.utc).isoformat()
+        upsert_data["last_productive_poll"] = now_iso
     if "captcha_balance" in body:
         try:
             cb = body["captcha_balance"]
@@ -102,43 +169,33 @@ async def scraper_heartbeat(request: Request):
         _gss = body["gtg_scrape_success"]
         upsert_data["gtg_scrape_success"] = None if _gss is None else bool(_gss)
 
+    # ── Per-platform alarm decisions ──────────────────────────────────────────
+    new_streaks: dict = body.get("consecutive_zero_polls") or {}
+    last_productive   = prev_data.get("last_productive_poll")
+    admin_url         = "https://goodlie.golf/admin"
+
+    new_alarm_active, _pending = _compute_platform_alarm_actions(
+        prev_streaks, new_streaks, prev_alarm_active, pp_threshold, pp_enabled,
+    )
+    upsert_data["per_platform_alarm_active"] = new_alarm_active
+
     supabase_admin.table("scraper_health").upsert(upsert_data).execute()
 
-    new_streaks: dict = body.get("consecutive_zero_polls") or {}
-    last_productive = prev_data.get("last_productive_poll")
-    admin_url = "https://goodlie.golf/admin"
-
-    all_platforms = set(prev_streaks.keys()) | set(new_streaks.keys())
-    for platform in all_platforms:
-        prev_count = int(prev_streaks.get(platform) or 0)
-        new_count = int(new_streaks.get(platform) or 0)
-        prev_status = _platform_status(prev_count, threshold)
-        new_status = _platform_status(new_count, threshold)
+    for action, platform, arg in _pending:
         try:
-            if prev_status != "down" and new_status == "down":
-                guidance = PLATFORM_GUIDANCE.get(platform, DEFAULT_GUIDANCE)
-                subject = f"[Good Lie] {platform.upper()} silent for {new_count} polls (about {new_count} min)"
-                lines = [
-                    f"Platform: {platform}",
-                    f"Consecutive zero-slot polls: {new_count}",
-                ]
-                if last_productive:
-                    lines.append(f"Last productive poll: {last_productive}")
-                lines += [
-                    "",
-                    guidance,
-                    "",
-                    f"Admin dashboard: {admin_url}",
-                ]
-                send_email(alarm_to, subject, "\n".join(lines), from_addr=alarm_from)
-                log.info("alarm email sent for platform=%s streak=%d", platform, new_count)
-            elif prev_status == "down" and new_status == "healthy":
-                subject = f"[Good Lie] {platform.upper()} recovered"
+            if action == "sms_alarm":
+                _send_operator_sms(operator_sms_to, platform, arg, prev_data)
+                log.info("platform alarm SMS sent platform=%s streak=%d", platform, arg)
+            elif action == "email_recovery":
+                subject   = f"[Good Lie] {platform.upper()} recovered"
                 body_text = f"{platform} is producing slots again."
+                if last_productive:
+                    body_text += f"\nLast productive poll: {last_productive}"
+                body_text += f"\n\nAdmin dashboard: {admin_url}"
                 send_email(alarm_to, subject, body_text, from_addr=alarm_from)
-                log.info("recovery email sent for platform=%s", platform)
+                log.info("platform recovery email sent platform=%s", platform)
         except Exception as exc:
-            log.error("heartbeat email failed for platform=%s: %s", platform, exc)
+            log.error("platform notification failed platform=%s action=%s: %s", platform, action, exc)
 
     if "sitekey_fallback" in body:
         new_fallback = bool(body["sitekey_fallback"])
