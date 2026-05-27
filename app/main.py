@@ -324,34 +324,37 @@ def fire_alert(body: FireAlertBody, x_api_key: Optional[str] = Header(default=No
     """Bulk-insert sent_slots for all matched slots and mark the alert as fired."""
     _require_api_key(x_api_key)
 
-    if body.slots:
-        rows = []
-        for slot in body.slots:
-            row: dict = {"alert_id": body.alert_id, "slot_key": slot.slot_key}
-            if body.user_id:
-                row["user_id"] = body.user_id
-            if slot.course_name:
-                row["course_name"] = slot.course_name
-            if slot.tee_time:
-                row["tee_time"] = slot.tee_time
-            if slot.players is not None:
-                row["players"] = slot.players
-            if body.scanned_at:
-                row["scanned_at"] = body.scanned_at
-            rows.append(row)
+    if not body.slots:
+        log.warning("fire_alert called with empty slots for alert %s — refusing to flip status", body.alert_id)
+        return {"ok": True, "fired": False, "reason": "no_slots"}
 
-        try:
-            supabase_admin.table("sent_slots").insert(rows).execute()
-        except Exception:
-            for row in rows:
-                try:
-                    supabase_admin.table("sent_slots").insert(row).execute()
-                except Exception:
-                    pass
+    rows = []
+    for slot in body.slots:
+        row: dict = {"alert_id": body.alert_id, "slot_key": slot.slot_key}
+        if body.user_id:
+            row["user_id"] = body.user_id
+        if slot.course_name:
+            row["course_name"] = slot.course_name
+        if slot.tee_time:
+            row["tee_time"] = slot.tee_time
+        if slot.players is not None:
+            row["players"] = slot.players
+        if body.scanned_at:
+            row["scanned_at"] = body.scanned_at
+        rows.append(row)
+
+    try:
+        supabase_admin.table("sent_slots").insert(rows).execute()
+    except Exception:
+        for row in rows:
+            try:
+                supabase_admin.table("sent_slots").insert(row).execute()
+            except Exception:
+                pass
 
     supabase_admin.table("alert_profiles").update({"status": "fired"}) \
         .eq("id", body.alert_id).execute()
-    return {"ok": True}
+    return {"ok": True, "fired": True}
 
 
 class MarkTakenBody(BaseModel):
