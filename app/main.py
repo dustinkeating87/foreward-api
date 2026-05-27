@@ -392,6 +392,50 @@ def fire_alert(body: FireAlertBody, x_api_key: Optional[str] = Header(default=No
     return {"ok": True, "fired": True}
 
 
+class RearmAlertBody(BaseModel):
+    alert_id: str
+    clear_sent_slots: bool = False
+
+
+@app.post("/scraper/rearm-alert", status_code=200)
+def rearm_alert(body: RearmAlertBody, x_api_key: Optional[str] = Header(default=None)):
+    """Re-arm a fired or expired alert back to active. System/admin use only — no subscription gate.
+
+    Guard: only transitions 'fired' or 'expired' → 'active'.
+    'active' and 'paused' alerts are returned unchanged.
+    clear_sent_slots (default false): when true, deletes sent_slots rows for the alert
+    so stale dedup state cannot suppress re-matching. Off by default to preserve the
+    delivery audit trail.
+    """
+    _require_api_key(x_api_key)
+
+    alert_row = (
+        supabase_admin.table("alert_profiles")
+        .select("id, status")
+        .eq("id", body.alert_id)
+        .maybe_single()
+        .execute()
+    )
+    if not alert_row.data:
+        raise HTTPException(status_code=404, detail="Alert not found")
+
+    current_status = alert_row.data["status"]
+    if current_status not in ("fired", "expired"):
+        log.info("rearm_alert: alert %s is '%s' — no change", body.alert_id, current_status)
+        return {"alert_id": body.alert_id, "status": current_status, "changed": False, "sent_slots_deleted": 0}
+
+    supabase_admin.table("alert_profiles").update({"status": "active"}).eq("id", body.alert_id).execute()
+    log.info("rearm_alert: alert %s '%s' → 'active'", body.alert_id, current_status)
+
+    deleted = 0
+    if body.clear_sent_slots:
+        result = supabase_admin.table("sent_slots").delete().eq("alert_id", body.alert_id).execute()
+        deleted = len(result.data) if result.data else 0
+        log.info("rearm_alert: deleted %d sent_slots rows for alert %s", deleted, body.alert_id)
+
+    return {"alert_id": body.alert_id, "status": "active", "changed": True, "sent_slots_deleted": deleted}
+
+
 class MarkTakenBody(BaseModel):
     current_slot_keys: list[str]
     scanned_course_names: list[str]
