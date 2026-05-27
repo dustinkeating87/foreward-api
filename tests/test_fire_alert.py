@@ -70,7 +70,9 @@ def test_non_empty_slots_flips_status():
         )
     assert r.status_code == 200
     assert r.json()["fired"] is True
-    mock_db.update.assert_called_once_with({"status": "fired"})
+    # status='fired' update must be in the update calls (may also include free_tier_used_at stamp)
+    update_args = [c.args[0] for c in mock_db.update.call_args_list]
+    assert {"status": "fired"} in update_args
 
 
 def test_empty_slots_returns_ok_false_fired():

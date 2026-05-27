@@ -370,6 +370,25 @@ def fire_alert(body: FireAlertBody, x_api_key: Optional[str] = Header(default=No
 
     supabase_admin.table("alert_profiles").update({"status": "fired"}) \
         .eq("id", body.alert_id).execute()
+
+    # Stamp free_tier_used_at at delivery time (not creation) for free-tier alerts
+    if body.user_id:
+        try:
+            alert_row = supabase_admin.table("alert_profiles") \
+                .select("is_free_tier") \
+                .eq("id", body.alert_id) \
+                .maybe_single() \
+                .execute()
+            if alert_row.data and alert_row.data.get("is_free_tier"):
+                supabase_admin.table("user_profiles") \
+                    .update({"free_tier_used_at": datetime.now(timezone.utc).isoformat()}) \
+                    .eq("id", body.user_id) \
+                    .is_("free_tier_used_at", "null") \
+                    .execute()
+                log.info("fire_alert: stamped free_tier_used_at for user %s", body.user_id[:8])
+        except Exception as exc:
+            log.warning("fire_alert: failed to stamp free_tier_used_at user=%s: %s", body.user_id, exc)
+
     return {"ok": True, "fired": True}
 
 

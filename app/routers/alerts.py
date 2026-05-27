@@ -77,8 +77,19 @@ def create_alert(body: AlertProfileCreate, ctx=Depends(get_current_user_with_pro
 
     now = datetime.now(timezone.utc)
 
-    if profile.get("free_tier_used_at") is None:
-        # First free alert
+    # Gate: check for any existing free-tier alert (replaces free_tier_used_at=null check,
+    # since free_tier_used_at is now stamped at delivery, not creation)
+    existing_ft = (
+        supabase_admin.table("alert_profiles")
+        .select("id, status")
+        .eq("user_id", user_id)
+        .eq("is_free_tier", True)
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    if not existing_ft.data:
+        # First free alert: no prior free-tier alert exists
         payload = {
             "user_id": user_id,
             "courses": body.courses,
@@ -96,9 +107,7 @@ def create_alert(body: AlertProfileCreate, ctx=Depends(get_current_user_with_pro
         result = supabase_admin.table("alert_profiles").insert(payload).execute()
         if not result.data:
             raise HTTPException(status_code=500, detail="Failed to create alert")
-        supabase_admin.table("user_profiles").update({
-            "free_tier_used_at": now.isoformat(),
-        }).eq("id", user_id).execute()
+        # NOTE: free_tier_used_at is NOT stamped here — it is stamped only on confirmed delivery
         log.info("free_tier_create: alert=%s user=%s", result.data[0]["id"], user_id[:8])
         send_free_tier_signup_email(
             user_email=ctx["user"].email or "",
@@ -107,7 +116,7 @@ def create_alert(body: AlertProfileCreate, ctx=Depends(get_current_user_with_pro
         )
         return result.data[0]
 
-    # User has used their first free alert — check grace retry eligibility
+    # User has a prior free-tier alert — check grace retry eligibility
     if profile.get("free_tier_grace_retry_used_at") is not None:
         if profile.get("paywall_email_sent_at") is None:
             try:
@@ -121,20 +130,8 @@ def create_alert(body: AlertProfileCreate, ctx=Depends(get_current_user_with_pro
                 log.error("paywall email failed user=%s: %s", user_id[:8], _e)
         raise HTTPException(status_code=402, detail="Payment required to create alerts")
 
-    prior_result = (
-        supabase_admin.table("alert_profiles")
-        .select("id, status")
-        .eq("user_id", user_id)
-        .eq("is_free_tier", True)
-        .order("created_at", desc=True)
-        .limit(1)
-        .execute()
-    )
-    if not prior_result.data:
-        log.warning("free_tier: free_tier_used_at set but no prior alert found user=%s", user_id[:8])
-        raise HTTPException(status_code=402, detail="Payment required to create alerts")
-
-    prior = prior_result.data[0]
+    # Reuse the existing_ft query result (already fetched above)
+    prior = existing_ft.data[0]
 
     if prior["status"] != "expired":
         raise HTTPException(status_code=402, detail="Payment required to create alerts")
