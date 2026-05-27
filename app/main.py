@@ -206,17 +206,33 @@ def export_alerts(
         for p in profiles_result.data or []:
             profiles_map[p["id"]] = p
 
+    # Build a map of user_id -> auth email as last-resort fallback when notify_email is unset
+    auth_email_map: dict[str, str] = {}
+    for uid in user_ids:
+        try:
+            resp = supabase_admin.auth.admin.get_user_by_id(uid)
+            if resp and resp.user and resp.user.email:
+                auth_email_map[uid] = resp.user.email
+        except Exception:
+            pass
+
     export = []
     for row in alerts_result.data or []:
-        profile = profiles_map.get(row.get("user_id"), {})
-        # Use user profile contact info; fall back to alert-level fields for backwards compat
-        email = profile.get("notify_email") or row.get("notify_email") or ""
+        uid = row.get("user_id")
+        profile = profiles_map.get(uid, {})
+        # Resolution order: user_profiles.notify_email → alert notify_email → auth.users.email
+        email = (
+            profile.get("notify_email")
+            or row.get("notify_email")
+            or (auth_email_map.get(uid, "") if uid else "")
+        )
         phone = profile.get("notify_phone") or row.get("notify_phone") or ""
         export.append({
             "id": row["id"],
-            "user_id": row.get("user_id"),
+            "user_id": uid,
             "status": row.get("status", "active"),
             "email": email,
+            "auth_email": auth_email_map.get(uid, "") if uid else "",
             "phone": phone,
             "courses": row.get("courses") or [],
             "date_from": row["date_from"],
