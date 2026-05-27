@@ -89,3 +89,102 @@ def test_empty_slots_returns_ok_false_fired():
             headers={"X-Api-Key": API_KEY},
         )
     assert r.json() == {"ok": True, "fired": False, "reason": "no_slots"}
+
+
+def test_success_response_includes_slot_counts():
+    """Successful insert returns slots_written=N, slots_failed=0."""
+    mock_db = _make_db()
+    with patch("app.main.supabase_admin", mock_db), \
+         patch("app.main.settings") as mock_settings:
+        mock_settings.export_api_key = API_KEY
+        from app.main import app
+        client = TestClient(app)
+        r = client.post(
+            "/scraper/fire-alert",
+            json={
+                "alert_id": "ddd",
+                "slots": [
+                    {"slot_key": "HV|12:10:00|18"},
+                    {"slot_key": "HV|13:20:00|18"},
+                ],
+            },
+            headers={"X-Api-Key": API_KEY},
+        )
+    data = r.json()
+    assert r.status_code == 200
+    assert data["fired"] is True
+    assert data["slots_written"] == 2
+    assert data["slots_failed"] == 0
+
+
+def test_bulk_insert_failure_falls_back_per_row_and_reports_counts():
+    """When bulk insert raises, per-row fallback runs; response reflects per-row results."""
+    mock_db = _make_db()
+    call_count = {"n": 0}
+
+    def insert_side_effect(data):
+        call_count["n"] += 1
+        if isinstance(data, list):
+            # bulk fails
+            raise Exception("timestamptz cast error")
+        # per-row: first succeeds, second fails
+        chain = MagicMock()
+        if call_count["n"] == 2:
+            chain.execute.side_effect = Exception("per-row failure")
+        else:
+            chain.execute.return_value = MagicMock(data=[{}])
+        return chain
+
+    mock_db.table.return_value.insert.side_effect = insert_side_effect
+
+    with patch("app.main.supabase_admin", mock_db), \
+         patch("app.main.settings") as mock_settings:
+        mock_settings.export_api_key = API_KEY
+        from app.main import app
+        client = TestClient(app)
+        r = client.post(
+            "/scraper/fire-alert",
+            json={
+                "alert_id": "eee",
+                "slots": [
+                    {"slot_key": "HV|12:10:00|18"},
+                    {"slot_key": "HV|13:20:00|18"},
+                ],
+            },
+            headers={"X-Api-Key": API_KEY},
+        )
+    data = r.json()
+    assert r.status_code == 200
+    assert data["fired"] is True
+    assert data["slots_written"] + data["slots_failed"] == 2
+
+
+def test_total_insert_failure_still_fires_with_zero_written():
+    """All rows fail → slots_written=0, slots_failed=N, alert still fired (delivery already sent)."""
+    mock_db = _make_db()
+
+    def always_fail(data):
+        chain = MagicMock()
+        chain.execute.side_effect = Exception("DB down")
+        return chain
+
+    mock_db.table.return_value.insert.side_effect = always_fail
+
+    with patch("app.main.supabase_admin", mock_db), \
+         patch("app.main.settings") as mock_settings:
+        mock_settings.export_api_key = API_KEY
+        from app.main import app
+        client = TestClient(app)
+        r = client.post(
+            "/scraper/fire-alert",
+            json={
+                "alert_id": "fff",
+                "slots": [{"slot_key": "HV|12:10:00|18"}],
+            },
+            headers={"X-Api-Key": API_KEY},
+        )
+    data = r.json()
+    assert r.status_code == 200
+    assert data["fired"] is True
+    assert data["slots_written"] == 0
+    assert data["slots_failed"] == 1

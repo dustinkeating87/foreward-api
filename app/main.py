@@ -359,14 +359,29 @@ def fire_alert(body: FireAlertBody, x_api_key: Optional[str] = Header(default=No
             row["scanned_at"] = body.scanned_at
         rows.append(row)
 
+    slots_attempted = len(rows)
+    slots_written = 0
+    slots_failed = 0
+
     try:
         supabase_admin.table("sent_slots").insert(rows).execute()
-    except Exception:
+        slots_written = slots_attempted
+    except Exception as bulk_exc:
+        log.warning("fire_alert: bulk insert failed for alert %s (%d rows) — trying per-row: %s",
+                    body.alert_id, slots_attempted, bulk_exc)
         for row in rows:
             try:
                 supabase_admin.table("sent_slots").insert(row).execute()
-            except Exception:
-                pass
+                slots_written += 1
+            except Exception as row_exc:
+                slots_failed += 1
+                log.error("fire_alert: sent_slots row failed for alert %s slot %s: %s",
+                          body.alert_id, row.get("slot_key", "?"), row_exc)
+
+    if slots_failed:
+        log.error("fire_alert: %d/%d sent_slots rows failed for alert %s — "
+                  "delivery confirmed (SMS/email sent), DB audit trail incomplete",
+                  slots_failed, slots_attempted, body.alert_id)
 
     supabase_admin.table("alert_profiles").update({"status": "fired"}) \
         .eq("id", body.alert_id).execute()
@@ -389,7 +404,7 @@ def fire_alert(body: FireAlertBody, x_api_key: Optional[str] = Header(default=No
         except Exception as exc:
             log.warning("fire_alert: failed to stamp free_tier_used_at user=%s: %s", body.user_id, exc)
 
-    return {"ok": True, "fired": True}
+    return {"ok": True, "fired": True, "slots_written": slots_written, "slots_failed": slots_failed}
 
 
 class RearmAlertBody(BaseModel):
