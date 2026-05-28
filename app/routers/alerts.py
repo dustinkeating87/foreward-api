@@ -9,11 +9,25 @@ from app.database import supabase_admin
 from app.dependencies import get_current_user, get_current_user_with_profile
 from app.email import send_free_tier_signup_email, send_paywall_email
 from app.schemas import AlertProfileCreate, AlertProfileUpdate
+from app.util.courses import all_keys as _all_course_keys
 
 router = APIRouter(tags=["alerts"])
 log = logging.getLogger(__name__)
 
 ALERT_LIMIT = 10
+
+
+def _validate_courses(courses: list[str]) -> None:
+    """Raise 422 if any slug is not in the canonical registry."""
+    if not courses:
+        return
+    known = set(_all_course_keys())
+    bad = [c for c in courses if c not in known]
+    if bad:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unknown course slug(s): {bad}. Use GET /courses for valid slugs.",
+        )
 
 
 def _is_paid(profile: dict) -> bool:
@@ -37,6 +51,8 @@ def create_alert(body: AlertProfileCreate, ctx=Depends(get_current_user_with_pro
     user_id = str(ctx["user"].id)
     profile = ctx["profile"]
     paid = _is_paid(profile)
+
+    _validate_courses(body.courses)
 
     if paid:
         # Paid path: enforce per-user alert limit, no free-tier columns set
@@ -210,6 +226,8 @@ def update_alert(alert_id: str, body: AlertProfileUpdate, ctx=Depends(get_curren
         raise HTTPException(status_code=404, detail="Alert not found")
 
     updates = body.model_dump(exclude_none=True, exclude={"course"})
+    if "courses" in updates:
+        _validate_courses(updates["courses"])
     if "date_from" in updates:
         updates["date_from"] = updates["date_from"].isoformat()
     if "date_to" in updates:

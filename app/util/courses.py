@@ -1,21 +1,19 @@
 """
 Canonical course key → display name mapping for foreward-api.
 
-alert_profiles.courses stores course keys (e.g. "lakeview").
-sent_slots.course_name stores display names written by the scraper
-(e.g. "Lakeview Golf Course"). This module is the single source of truth
-for translating between them within foreward-api.
+alert_profiles.courses stores course keys (slug, e.g. "lakeview"). This module
+is the write-time validation gate: any slug not present here is rejected 422.
 
-Display names here MUST match what the scraper writes to sent_slots.course_name
-exactly (case-sensitive), otherwise fired_alerts_30d counts in /admin/course-demand
-will be wrong. The authoritative source is the display_name field in
-GOLFNOW_COURSES (golfnow_scraper.py) and CHRONOGOLF_COURSES (chronogolf_scraper.py).
+Display names here must match what the scraper writes to sent_slots.course_name
+(case-sensitive) for GolfNow and Chronogolf — authoritative source is
+GOLFNOW_COURSES / CHRONOGOLF_COURSES in the scraper files.
 
-GTG courses are NOT in this mapping — their CourseName comes from the GTG
-gateway API at runtime. Lookups for unknown keys fall back to the raw key.
+GTG display names here are ADVISORY ONLY. The gateway API
+(gateway.golfthe6ix.com) is the runtime authority; CourseName in live slots
+may differ. Slugs are still canonical and must match exactly.
 
-Keeping this dict in sync with the scraper is manual discipline for now.
-Long-term plan: move to a shared Supabase courses table (see ARCHITECTURE.md).
+Keeping this dict in sync with the scraper's course registries is enforced by
+CI (foreward-scraper/.github/workflows/check_course_keys.yml).
 """
 
 from typing import Optional
@@ -171,6 +169,13 @@ COURSES: dict[str, dict[str, str]] = {
     "bayview-golf-country-club": {"display_name": "Bayview Golf & Country Club", "platform": "chronogolf"},
     "mill-run-golf-club-ontario": {"display_name": "Mill Run Golf Club", "platform": "chronogolf"},
     "eldorado-golf-club": {"display_name": "Eldorado Golf Club", "platform": "chronogolf"},
+    # ── GTG (display names advisory — gateway API is authoritative at runtime) ─
+    "dentonia-park":  {"display_name": "Dentonia Park Golf Course",  "platform": "gtg"},
+    "don-valley":     {"display_name": "Don Valley Golf Course",     "platform": "gtg"},
+    "humber-valley":  {"display_name": "Humber Valley Golf Course",  "platform": "gtg"},
+    "maple-acres":    {"display_name": "Maple Acres Golf Course",    "platform": "gtg"},
+    "scarlett-woods": {"display_name": "Scarlett Woods Golf Course", "platform": "gtg"},
+    "tam-o-shanter":  {"display_name": "Tam O'Shanter Golf Course",  "platform": "gtg"},
 }
 
 
