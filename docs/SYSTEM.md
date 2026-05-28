@@ -25,13 +25,13 @@ Good Lie Golf — tee-time alert service for GTA-area golf courses. Users config
 
 **Naming rule:** "Snipe" is internal-only — never user-facing. Always "alert," "match," or "opening."
 
-### Product model (as of 2026-05-25)
+### Product model (as of 2026-05-27)
 
 Free tier is LIVE (`FREE_TIER_ENABLED=true` in Railway web service).
 
-**Unsubscribed path:** ONE free alert (`is_free_tier=true` on the alert row). Grace retry: if that alert expires without ever firing an SMS, user gets one additional free alert. After that → 402 Payment Required.
+**Unsubscribed path:** ONE free alert (`is_free_tier=true` on the alert row). Grace retry: if that alert expires without ever firing an SMS, user gets one additional free alert. After that → 402 Payment Required. `free_tier_used_at` is stamped at first confirmed delivery, not at creation.
 
-**Paid path:** $9.99 CAD/month Stripe subscription. Up to 10 active alerts. Verify current trial details in `billing.py` and Stripe dashboard.
+**Paid path:** $9.99 CAD/month Stripe subscription. `billing.py` updated to `trial_period_days: 30` on 2026-05-26 — verify Stripe dashboard price config matches before treating as confirmed. Up to 10 active alerts.
 
 ---
 
@@ -48,7 +48,7 @@ Free tier is LIVE (`FREE_TIER_ENABLED=true` in Railway web service).
 | Billing | Stripe | `foreward-api/app/routers/billing.py` | — |
 | Captcha | 2Captcha (GTG Turnstile only) | `foreward-scraper/tee_sniper.py` | — |
 | Proxies | Webshare (rotation pool) | `foreward-scraper` | — |
-| CI | GitHub Actions parse-check on push | both backend repos | GitHub web UI |
+| CI | GitHub Actions on push | both backend repos | GitHub web UI |
 | Backups | Local pg_dump → Google Drive (weekly Sun 10 AM via launchd) | `foreward-api/scripts/backup/` | local Mac |
 | Task tracking | ClickUp space `Good Lie Golf` (id `901313780791`) | — | ClickUp connector |
 
@@ -79,7 +79,7 @@ Backend changes do NOT belong in Lovable. Lovable holds only the frontend and on
 
 **GTG tee-time data is fully public.** No login, no session, no cookies. Confirmed live 2026-05-24 and in production 2026-05-25 (105 slots, zero auth).
 
-**Implementation:** direct `httpx` GET to `gateway.golfthe6ix.com/Booking/Teetimes` with `CaptchaTokenV3` header (Turnstile token, solved by 2captcha, `action=Booking_Teetimes`). YYZ proxy on gateway calls. One fresh solve per date per poll.
+**Implementation:** direct `httpx` GET to `gateway.golfthe6ix.com/Booking/Teetimes` with `CaptchaTokenV3` header (Turnstile token, solved by 2captcha, `action=Booking_Teetimes`). YYZ proxy on gateway calls. One fresh solve per date per poll. Sitekey: scraped live from `GET https://gateway.golfthe6ix.com/App/GlobalTenantSettings` (JSON field `CloudflareRecaptchaSiteKey`); hardcoded fallback only as last resort with loud WARN.
 
 **Do NOT reintroduce login/session/PAT/Playwright.** The "GTG needs login" assumption from April 2026 was wrong and cost weeks. See ClickUp canonical doc for full debugging guidance.
 
@@ -98,6 +98,7 @@ Backend changes do NOT belong in Lovable. Lovable holds only the frontend and on
 | 2captcha balance | `scraper_health` table OR 2captcha dashboard |
 | Stripe pricing / subscription state | Stripe dashboard OR `SELECT stripe_customer_id, is_active FROM user_profiles` |
 | What the scraper is doing | Railway logs for `resourceful-delight` OR `scraper_health.slots_last_poll` jsonb |
+| Canonical course registry (slug ↔ display ↔ platform) | `foreward-api/app/util/courses.py` (API side); COURSES lists in each scraper file (scraper side) |
 
 **Rule: if a fact about current state is needed, query a live source. Do not infer from this file.**
 
@@ -107,14 +108,14 @@ Backend changes do NOT belong in Lovable. Lovable holds only the frontend and on
 
 | Failure | Detection | Recovery |
 |---|---|---|
-| GTG sitekey rotation | `[gtg] SITEKEY FALLBACK` WARN in logs | Fix live scrape or update hardcoded fallback |
+| GTG sitekey rotation | `[gtg] SITEKEY FALLBACK` WARN in logs; `sitekey_fallback_active` alarm email within ~2.5h | Scrape self-heals via GlobalTenantSettings; alarm clears automatically |
 | 2captcha balance exhausted | `scraper_health.captcha_balance` alarm | Top up at 2captcha.com |
-| GolfNow/Chronogolf block | consecutive_zero_polls (see note) | Proxy rotation / wait |
+| GolfNow/Chronogolf block | `consecutive_zero_polls` HTTP-failure counter | Proxy rotation / wait |
 | Worker crash | Heartbeat stale | Railway auto-restart |
 | API down during fire | Repeated SMS | Manual SQL UPDATE |
 | Stripe webhook drops | Manual reconciliation | Stripe retries ~3 days |
 
-**KNOWN-BROKEN: `consecutive_zero_polls`** false-alarms when no active alerts target a platform (alert-driven filtering skips the platform entirely, which resets the counter as if healthy). Full fix in ClickUp ticket 86ahnu41e.
+**KNOWN-DRIFT: `alert_profiles.courses` contains a mix of slugs and display names** from legacy creation paths (before 2026-05-27). Active paying alerts hotfixed; remaining bad rows are fired/expired. Structural fix (normalize at API write-time + idempotent backfill) in progress — tracked in 86ahk5w6n. Do not trust raw `courses` values as valid slugs without checking `foreward-api/app/util/courses.py`.
 
 ---
 
@@ -131,10 +132,14 @@ Backend changes do NOT belong in Lovable. Lovable holds only the frontend and on
 | Multi-match folds to one SMS | 2026-05-03 | Multiple slots in one poll = one summary SMS |
 | Scraper writes status via API, not direct DB | 2026-05-03 | Centralizes business logic |
 | `is_free_tier` is per-alert, not per-user | 2026-05-07 | User can hold paid and free-tier alerts simultaneously |
-| `free_tier_used_at` is lifetime once-only | 2026-05-07 | One free-tier opportunity per user, ever |
+| `free_tier_used_at` stamped at first confirmed delivery | 2026-05-07 / updated 2026-05-27 | Prevents premature consumption |
 | GTG data is public — no login needed, ever | 2026-05-24 | Confirmed live |
 | GTG uses direct httpx GET + 2captcha CaptchaTokenV3 | 2026-05-25 | Confirmed in production |
 | ClickUp doc is source of truth; repo SYSTEM.md is mirror | 2026-05-25 | Prevents doc drift |
+| auth.users email is delivery floor; fallback chain: notify_email → auth email | 2026-05-27 | Auth email is guaranteed non-null |
+| fire_alert refuses to set status='fired' on empty slots | 2026-05-27 | Prevents silent no-delivery fires |
+| DB reads from chat OK; live-state writes go through API endpoints | 2026-05-27 | Prevents bypassing business-logic guards |
+| **slug (e.g. "humber-valley") is canonical for `alert_profiles.courses`; normalize at API write-time** | **2026-05-27** | **Format drift has broken matching 3+ times; no more one-off matcher patches** |
 
 ---
 
@@ -142,13 +147,53 @@ Backend changes do NOT belong in Lovable. Lovable holds only the frontend and on
 
 Append-only. Most recent at top. Updated automatically by Claude Code draining ClickUp list `901327295790`.
 
+### 2026-05-27 — GTG zero-fire fixed; no-delivery defect trio; re-arm endpoint; CC permission policy; slug canonical
+
+GTG fired zero alerts since ~May 13–14. Root cause: `_normalize_course()` stripped apostrophes but not hyphens; alert slug "humber-valley" never matched scraped CourseName "Humber Valley". Fix: strip ALL non-alphanumerics. Commit d8198b7, verified live (rsantoo's alert fired).
+
+Course-identifier format drift named as recurring bug class. **LOCKED: slug is canonical.** Structural fix tracked in 86ahk5w6n.
+
+No-delivery defect trio: (A) email fallback to auth.users.email (delivery floor, commit 71bc614); (B) fire_alert refuses status='fired' on empty slots (scraper bc7a3c3, api afe7ff3); (C) free_tier_used_at stamped at delivery not creation (commit 350d44d).
+
+Internal POST /scraper/rearm-alert: API-key auth, no subscription gate. Commit 05ddb73.
+
+Claude Code permission policy in both repos: silent-allow routine ops; force-prompt irreversibles. Python edits to billing.py/auth.py rely on prose-only protection — Dustin must review diffs for those files.
+
+### 2026-05-26 (pm-2) — Admin dashboard honest-health; auth+signup fixes; date validation; CI fixed
+
+Admin honest-health: `_platform_status(streak, threshold)` as single source of truth. Frontend (Admin.tsx) now renders backend verdict — was computing health against hardcoded thresholds, could show green while platform was dead. Commit 9911d70.
+
+Auth 15-min logout fixed (Lovable): `refresh()` now clears only on 401, not transient 502/503.
+
+**Signup redirect fixed (Lovable) — 100% of organic signups were being redirected to sign-in.** Fix: call `refresh()` before navigating from signup. Dominant activation leak.
+
+Server-side alert date validation (schemas.py): rejects bad date ranges, inverted windows, malformed HH:MM. 8 tests.
+
+CI: deleted broken "Refresh STATE.md" workflow. Scraper CI now runs pytest on Python 3.11 against real module (all scraper tests were unguarded since May 3).
+
+Still open (Stripe, Dustin-action): confirm trial=30 days in Stripe dashboard; disable auto "trial ending soon" email.
+
+### 2026-05-26 (pm) — GTG sitekey scrape truly fixed (GlobalTenantSettings); idle-nudge email
+
+Sitekey root cause: key was **never** in HTML or JS bundles. All prior extraction paths (including the May 25 "direct bundle fetch" fix) looked in the wrong place. Key served by `GET https://gateway.golfthe6ix.com/App/GlobalTenantSettings` (field `CloudflareRecaptchaSiteKey`). **Supersedes May 25 "sitekey fixed" entry.** Commit f0b667f. Confirmed live: `sitekey_fallback_active` → false.
+
+Idle-nudge email (app/idle_nudge.py): daily loop, targets organic free users with 0 alerts, 4+ days since signup. First run sent to 7 users.
+
+### 2026-05-26 — Three-state zero-poll counter; sitekey fallback alarm; free→paid emails
+
+Three-state zero-poll counter: throttle path no longer resets GTG counter (was root cause of May 14–21 silent outage, not aggregate-masking as previously attributed). GTG treats zero-slot response as failure; GolfNow/Chronogolf treat only HTTP failure. **KNOWN-BROKEN for consecutive_zero_polls removed — fixed.**
+
+sitekey_fallback_active alarm: scraper reports flag → API transitions/emails on entry. Future rotation alarms within ~2.5h. Migration `20260526_add_sitekey_fallback_to_scraper_health.sql`.
+
+Free→paid emails: success/upgrade email on free-tier alert fire (gated: is_free_tier AND NOT user_is_paid); expiry email rewritten. `/export-alerts` now returns `is_free_tier` and `user_is_paid`.
+
 ### 2026-05-25 — GTG rebuild live; session code retired; docs made canonical
 
-GTG rebuild confirmed in production (105 slots, 3 2captcha solves, ~$0.01 per poll, 15-min cadence). `scripts/mint_gtg_session.py` deleted. SESSION_DIR dead (Railway volume can be detached). Sitekey scrape fixed: JS bundle fetches now go direct (no proxy) — CDN was 502ing the datacenter proxy on static assets. ClickUp doc created as canonical source of truth; SYSTEM.md files rewritten as mirrors; ARCHITECTURE.md in scraper repo stubbed.
+GTG rebuild confirmed in production (105 slots, 3 2captcha solves, ~$0.01/poll). `mint_gtg_session.py` deleted. Sitekey scrape attempted via direct bundle fetch — later found to be the wrong extraction path entirely (see 2026-05-26 pm). ClickUp doc created as canonical source of truth; SYSTEM.md files rewritten as mirrors; ARCHITECTURE.md stubbed.
 
 ### 2026-05-25 — GTG token-reuse confirmed non-reusable; poll interval locked at 900s
 
-Probe (max 6 requests) confirmed each `/Booking/Teetimes` request requires a fresh 2captcha solve. Token reuse returns 400/`400002002`. GTG_POLL_INTERVAL=900 chosen over 600 to hold under $15/mo budget at ≥3 active alert dates; tunable via env var.
+Each `/Booking/Teetimes` request requires a fresh 2captcha solve. GTG_POLL_INTERVAL=900 chosen to hold under $15/mo budget.
 
 ### 2026-05-24 — GTG: data is public; proxy IP not burned; Patchright fingerprint was blocker
 
@@ -156,7 +201,7 @@ Live logged-out browser testing confirmed GTG tee-time data is fully public (no 
 
 ### 2026-05-23 — GTG: cf_clearance lasts ~1yr; manual-clearance path explored (now moot)
 
-cf_clearance cookie expiry confirmed ~1 year. Session pivot to cookie-reuse as lead path — superseded by the direct-GET + 2captcha approach confirmed 2026-05-24.
+cf_clearance cookie expiry confirmed ~1 year. Session pivot to cookie-reuse as lead path — superseded by the direct-GET + 2captcha approach.
 
 ### 2026-05-21 — ARCHITECTURE.md retired; SYSTEM.md format established
 
@@ -164,7 +209,7 @@ Doc drift was causing multi-session knowledge loss. Replaced architecture doc wi
 
 ### 2026-05-09 — Free-tier lifecycle simplified
 
-Migration `20260509_simplify_free_tier.sql` dropped renewal-cycle model (polling_expires_at, renewals_used, expiry_state, final_expired_at). Live model: one free alert + grace retry → pay. Blocks 5-7 spec renewal endpoints that no longer exist.
+Migration `20260509_simplify_free_tier.sql` dropped renewal-cycle model. Live model: one free alert + grace retry → pay.
 
 ### 2026-05-07 — Block 3: free-tier alert lifecycle implemented and verified
 
@@ -172,11 +217,11 @@ Migration `20260509_simplify_free_tier.sql` dropped renewal-cycle model (polling
 
 ### 2026-05-06 — Block 2: phone verification; Block 1: free-tier schema
 
-Phone verification endpoints (send/verify/resend). `phone_verification_codes` table. Free-tier columns added to user_profiles and alert_profiles.
+Phone verification endpoints (send/verify/resend). `phone_verification_codes` table.
 
 ### 2026-05-03 — Alert lifecycle, backups, CI, silent-failure monitoring
 
-Full alert lifecycle, sent_slots schema, scraper expire/fire endpoints, activity ticker, backups, CI. Silent-failure monitoring via consecutive_zero_polls (later identified as false-alarm prone when no alerts target a platform).
+Full alert lifecycle, sent_slots schema, scraper expire/fire endpoints, activity ticker, backups, CI. Silent-failure monitoring via consecutive_zero_polls (two-state; superseded by three-state counter 2026-05-26).
 
 ### 2026-04-27 — EZLinks retired
 
