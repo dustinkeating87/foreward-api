@@ -147,6 +147,10 @@ Backend changes do NOT belong in Lovable. Lovable holds only the frontend and on
 
 Append-only. Most recent at top. Updated automatically by Claude Code draining ClickUp list `901327295790`.
 
+### 2026-06-03 — Good Lie native app (Capacitor) reaches verified Phase 1
+
+App is wrapped in Capacitor as a native shell over the live web app, in a new private repo `goodlie-app` (separate from foreward by design — Lovable owns foreward and would clobber native folders). Spike resolved GO: email/password Supabase auth survives the Android WebView and lands on the alerts dashboard. Phase plan: P1 wrap setup (done), P2 native push (FCM/APNs + device-token table + scraper notify path; `device_tokens` migration staged, not applied), P3 payments (RevenueCat/IAP to the `is_active` gate), P4 store builds (Android any OS; iOS needs macOS+Xcode, available). Paid gates deferred. Stable truth + pointers only.
+
 ### 2026-05-28 — Canonical slug registry; write-time validation; GTG slot enrichment; CI key-parity
 
 Course-identifier format drift fixed structurally (ticket 86ahk5w6n). **Slug is canonical everywhere.** Canonical registry = `foreward-api/app/util/courses.py`. A Supabase courses table (A2) was rejected: scraper per-platform operational config (platform IDs, GTG abbreviations) is irreducible and can't collapse into a shared table — a table adds infra without removing the drift surface. The anti-recurrence mechanism is the CI key-parity check.
