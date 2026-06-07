@@ -12,6 +12,16 @@ Never freeze volatile state as prose here. Schema, pricing, env vars, course lis
 
 ---
 
+## Reading rule: ticket status is not ship state
+
+ClickUp ticket status answers only "is there open work." It is never evidence of whether a feature exists, is enabled, or matches current behavior. A "to do" ticket does not mean a feature is unbuilt; a "complete" ticket does not mean live behavior matches its spec.
+
+Whether something is built, shipped, enabled, or has-sent is answered in order by: (1) the decision log in this doc; (2) the live source named in the Pointers table (Railway vars, Supabase, repo source, SendGrid). Never from ticket status, never from injected chat memory alone.
+
+**Session-start enforcement.** Make no claims about system state until this doc's body has been read live this session. If the read fails, retry and use ClickUp search as fallback before reasoning; injected memory is not a substitute (recency bias). When answering any is-it-built / is-it-on / how-many / has-it-sent question, state the live source checked so a stale assumption is catchable on sight.
+
+---
+
 ## Product
 
 Good Lie Golf — tee-time alert service for GTA-area golf courses. Users configure courses + date/time windows + player count + holes, and receive SMS notifications when matching tee times open. The product is the *alert*, not the *booking*.
@@ -146,6 +156,12 @@ Backend changes do NOT belong in Lovable. Lovable holds only the frontend and on
 ## Decision log
 
 Append-only. Most recent at top. Updated automatically by Claude Code draining ClickUp list `901327295790`.
+
+### 2026-06-07 — Reading rule: ticket status is not ship state
+
+New rule added after a chat session incorrectly concluded that free-tier lifecycle emails were unbuilt by reading ClickUp ticket status, when the decision log already recorded them as shipped on 2026-05-26. Root cause: tickets are never updated after work ships; only the decision log and live sources are authoritative.
+
+Rule: ticket status answers only "is there open work." Whether something is built, shipped, enabled, or has-sent is determined by (1) this decision log, then (2) the live source (Railway vars, Supabase, repo source, SendGrid). Never from ticket status; never from injected chat memory alone. Session-start enforcement: state the live source checked for every live-state assertion.
 
 ### 2026-06-03 — Good Lie native app (Capacitor) reaches verified Phase 1
 
