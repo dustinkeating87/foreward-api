@@ -208,16 +208,20 @@ def send_idle_nudge_email(to: str) -> None:
 
 
 def send_paywall_email(to: str) -> None:
-    """Sent once when a free-tier user exhausts both their free alert and grace retry (hits the 402 wall)."""
+    """Sent once after a free-tier user's alert fires and they haven't subscribed."""
     send_email(
         to,
-        "That course just isn't into you",
+        "That one was on the house",
         (
-            "Tough one to deliver, but that course just isn't into you. We played matchmaker as hard as we know how, "
-            "and it still gave you nothing. Twice.\n\n"
-            "So here's our consolation prize: a full month on us. We'll watch up to 10 courses at once and grab the "
-            "second anything opens. Cancel anytime, no hard feelings, we're used to rejection by now.\n\n"
-            "Start my free month: https://goodlie.golf/subscribe"
+            "Classic good news, bad news.\n\n"
+            "Good news: it worked. You told us where you wanted to play, we watched the tee sheet for you, "
+            "and your phone went off when a spot opened.\n\n"
+            "Bad news: that was your free one. Keeping this going costs money to run.\n\n"
+            "The first 100 members lock in at $4.99 a month for their first year, then $9.99. "
+            "Applies automatically at checkout, no code needed. Up to 10 alerts at once, across every "
+            "course we watch. Cancel anytime. The count is not posted.\n\n"
+            "Keep watching? https://goodlie.golf/subscribe\n\n"
+            "Good Lie"
         ),
     )
 
