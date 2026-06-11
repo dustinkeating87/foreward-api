@@ -28,19 +28,30 @@ def create_checkout_session(body: CheckoutSessionRequest, current_user=Depends(g
         customer_id = customer.id
         supabase_admin.table("user_profiles").update({"stripe_customer_id": customer_id}).eq("id", str(current_user.id)).execute()
 
+    session_params = {
+        "customer": customer_id,
+        "payment_method_types": ["card"],
+        "line_items": [{"price": settings.stripe_price_id, "quantity": 1}],
+        "mode": "subscription",
+        "success_url": settings.success_url + "?session_id={CHECKOUT_SESSION_ID}",
+        "cancel_url": settings.cancel_url,
+        "metadata": {"supabase_user_id": str(current_user.id)},
+    }
+    if settings.founder_coupon_id:
+        session_params["discounts"] = [{"coupon": settings.founder_coupon_id}]
+
     try:
-        session = stripe.checkout.Session.create(
-            customer=customer_id,
-            payment_method_types=["card"],
-            line_items=[{"price": settings.stripe_price_id, "quantity": 1}],
-            mode="subscription",
-            subscription_data={"trial_period_days": 30},
-            success_url=settings.success_url + "?session_id={CHECKOUT_SESSION_ID}",
-            cancel_url=settings.cancel_url,
-            metadata={"supabase_user_id": str(current_user.id)},
-        )
+        session = stripe.checkout.Session.create(**session_params)
     except stripe.StripeError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        if settings.founder_coupon_id:
+            # Coupon rejected — retry at full price so checkout never blocks
+            session_params.pop("discounts", None)
+            try:
+                session = stripe.checkout.Session.create(**session_params)
+            except stripe.StripeError as e2:
+                raise HTTPException(status_code=400, detail=str(e2))
+        else:
+            raise HTTPException(status_code=400, detail=str(e))
 
     return {"checkout_url": session.url, "session_id": session.id}
 

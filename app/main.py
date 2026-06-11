@@ -278,6 +278,15 @@ def is_sent_slot(alert_id: str, slot_key: str, x_api_key: Optional[str] = Header
 
 # ── Alert lifecycle ────────────────────────────────────────────────────────────
 
+@app.post("/scraper/send-paywall-emails", status_code=200)
+async def send_paywall_emails(x_api_key: Optional[str] = Header(default=None)):
+    """Trigger the daily conversion sweep. Dry-run behaviour controlled by PAYWALL_EMAIL_DRY_RUN env var."""
+    _require_api_key(x_api_key)
+    from app.conversion_sweep import run_conversion_sweep
+    await run_conversion_sweep(dry_run=settings.paywall_email_dry_run)
+    return {"ok": True, "dry_run": settings.paywall_email_dry_run}
+
+
 @app.post("/scraper/expire-alerts", status_code=200)
 def expire_stale_alerts(x_api_key: Optional[str] = Header(default=None)):
     """Expire alert_profiles where date_to < today and status='active'."""

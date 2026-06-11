@@ -150,12 +150,34 @@ Backend changes do NOT belong in Lovable. Lovable holds only the frontend and on
 | fire_alert refuses to set status='fired' on empty slots | 2026-05-27 | Prevents silent no-delivery fires |
 | DB reads from chat OK; live-state writes go through API endpoints | 2026-05-27 | Prevents bypassing business-logic guards |
 | slug is canonical for `alert_profiles.courses`; enforced at API write-time since 2026-05-28; CI guards scraper registry sync | 2026-05-27 (locked) / 2026-05-28 (enforced) | Format drift broke matching 3+ times; structural fix complete |
+| Founding 100 offer: first 100 subscribers get founding rate for first year, then roll to list price; "first 100" is marketing copy, not Stripe enforcement; closing the offer = unset FOUNDER_COUPON_ID | 2026-06-10 / amended 2026-06-11 | FOUNDINGYEAR coupon is uncapped (max_redemptions=null); urgency via unknown-remaining scarcity, no visible counter, no deadline |
+| No Stripe trial; subscriptions charge from day 1 | 2026-06-11 | Trial was redundant with the founding $4.99 rate and the free-tier alert; free alert is now the only free entry |
 
 ---
 
 ## Decision log
 
 Append-only. Most recent at top. Updated automatically by Claude Code draining ClickUp list `901327295790`.
+
+### 2026-06-11 — Trial removed; FOUNDINGYEAR coupon confirmed; paywall sweep endpoint wired
+
+**AMENDED 2026-06-10 entry:** FOUNDINGYEAR coupon has `max_redemptions=None` (uncapped). "First 100" is marketing copy, not Stripe enforcement. Closing the offer is a manual decision: unset `FOUNDER_COUPON_ID` on Railway `spirited-youthfulness`.
+
+Stripe trial removed from checkout. `subscription_data: {trial_period_days: 30}` deleted from `billing.py`. Stripe Price `price_1TPOe5F1e15xxqfqUgs0dbNE` confirmed via live API to have `recurring.trial_period_days=null` — no dashboard-level trial exists; code removal is sufficient. Subscriptions charge from day 1. Tickets 86ahpqy0m and 86ahqck8e both closed as superseded. Unifying funnel story: free alert fires → conversion email pitches $4.99 founding rate → checkout charges $4.99/mo via FOUNDINGYEAR coupon → rolls to $9.99 after 12 months. No free month anywhere.
+
+Paywall conversion sweep endpoint: `POST /scraper/send-paywall-emails` added to `app/main.py` (API-key auth, same as other `/scraper/*` endpoints). Calls `run_conversion_sweep(dry_run=settings.paywall_email_dry_run)`. New `PAYWALL_EMAIL_DRY_RUN` env var (Railway `spirited-youthfulness`), default `true` — kill switch; set to `false` to enable live sends. Scraper (`tee_sniper.py`) calls endpoint once per UTC day via `send_paywall_emails_daily()` with date-gate. `conversion_sweep.py` (from prior session) provides query logic and `auth.users` email fallback.
+
+### 2026-06-10 — Founding-member offer + FOUNDER_COUPON_ID auto-applied at checkout
+
+*(Amended 2026-06-11: coupon is uncapped — see 2026-06-11 entry above)*
+
+First 100 subscribers get a founding rate for their first year, then roll to list price ($9.99/mo CAD). List price unchanged — market scan confirmed mid-band and not the conversion blocker. Duration is one year, NOT lifetime. "First 100" is marketing scarcity; Stripe max_redemptions=null (uncapped). No visible counter, no deadline.
+
+Backend: new `FOUNDER_COUPON_ID` env var on Railway `spirited-youthfulness`. If set and non-empty, `billing.py:create_checkout_session` adds `discounts:[{coupon: FOUNDER_COUPON_ID}]` to the Stripe checkout session. Kill switch: unset/empty = full-price checkout. Defensive fallback: if Stripe rejects the coupon for any reason, session is retried without the discount so checkout never fails. `allow_promotion_codes` is NOT set (auto-applied coupon; a promo code field would confuse users and Stripe rejects `discounts` + `allow_promotion_codes` together). Changes: `app/config.py` (new `founder_coupon_id` field), `app/routers/billing.py` (`create_checkout_session` refactored to `session_params` dict + conditional discount + retry).
+
+Offer placement: FIRST ALERT FREE (hero) → FOUNDING 100 / $4.99 first year → $9.99 / cancel anytime. Not burned into hero image. Reinforce on landing page (Lovable).
+
+Parked: season pass (Apr–Oct) priced to playable months, revisited once there are subscribers to retain.
 
 ### 2026-06-07 — Reading rule: ticket status is not ship state
 

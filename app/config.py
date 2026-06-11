@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     cancel_url: str = "http://localhost:3000/cancel"
     free_tier_enabled: bool = False
     frontend_url: str = "http://localhost:3000"
+    founder_coupon_id: str = ""
+    paywall_email_dry_run: bool = True
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 
