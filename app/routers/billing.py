@@ -122,10 +122,11 @@ def _handle_checkout_completed(session: dict):
 
     profile_result = supabase_admin.table("user_profiles").select("email").eq("id", user_id).maybe_single().execute()
     user_email = (profile_result.data or {}).get("email") or ""
+    amount_cad = (session.get("amount_total") or 999) / 100
     send_paid_signup_email(
         user_email=user_email,
         stripe_subscription_id=subscription_id or "",
-        amount_cad=9.99,
+        amount_cad=amount_cad,
     )
 
 
