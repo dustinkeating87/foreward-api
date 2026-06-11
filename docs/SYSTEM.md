@@ -159,6 +159,10 @@ Backend changes do NOT belong in Lovable. Lovable holds only the frontend and on
 
 Append-only. Most recent at top. Updated automatically by Claude Code draining ClickUp list `901327295790`.
 
+### 2026-06-11 — First live paywall sweep sent; PAYWALL_EMAIL_DRY_RUN flipped false
+
+First live conversion sweep executed 2026-06-11 13:43:56 UTC. `PAYWALL_EMAIL_DRY_RUN` flipped to `false` on Railway `spirited-youthfulness`. Sweep sent 11 emails (all qualifying users: `free_tier_used_at IS NOT NULL`, `paywall_email_sent_at IS NULL`, not active, not beta, fired >24h ago). All 11 delivered via SendGrid confirmed via activity API (status=delivered, 13:43:58–13:44:11 UTC). Recipients: brandon.kofman@gmail.com, cnolfi24@gmail.com, ecrsqvxs@sharklasers.com, jaygall@hotmail.com, jalild@me.com, jon.banack@gmail.com, matt.mamalyga@gmail.com, mkwarner@rogers.com, owen43@me.com, rsantoo@rogers.com, willtblanco@gmail.com. All 11 `user_profiles.paywall_email_sent_at` rows stamped at 2026-06-11 13:43:56.770319 UTC. User df3c1003 (fired today, <24h) correctly excluded and unstamped — will qualify on next sweep. No failures; no rows stamped without a confirmed send.
+
 ### 2026-06-11 — Paywall email updated with founding offer copy; FOUNDER_COUPON_ID set; checkout confirmed $4.99; 12 vs 11 delta explained
 
 Paywall conversion email (`send_paywall_email`) updated with founding-offer copy. Subject: "That one was on the house." Good/bad-news structure kept; bad-news block now pitches $4.99/mo founding rate ("The first 100 members lock in at $4.99 a month for their first year, then $9.99. Applies automatically at checkout, no code needed. Up to 10 alerts at once, across every course we watch. Cancel anytime. The count is not posted."). Old $9.99-only language retired. Committed 96dfcd2, pushed main.
