@@ -159,6 +159,16 @@ Backend changes do NOT belong in Lovable. Lovable holds only the frontend and on
 
 Append-only. Most recent at top. Updated automatically by Claude Code draining ClickUp list `901327295790`.
 
+### 2026-06-11 — Paywall email updated with founding offer copy; FOUNDER_COUPON_ID set; checkout confirmed $4.99; 12 vs 11 delta explained
+
+Paywall conversion email (`send_paywall_email`) updated with founding-offer copy. Subject: "That one was on the house." Good/bad-news structure kept; bad-news block now pitches $4.99/mo founding rate ("The first 100 members lock in at $4.99 a month for their first year, then $9.99. Applies automatically at checkout, no code needed. Up to 10 alerts at once, across every course we watch. Cancel anytime. The count is not posted."). Old $9.99-only language retired. Committed 96dfcd2, pushed main.
+
+`FOUNDER_COUPON_ID` set to `FOUNDINGYEAR` (uppercase) on Railway `spirited-youthfulness`. Note: coupon exists in Stripe as `FOUNDINGYEAR` (uppercase) — initially set to lowercase `foundingyear` (wrong; Stripe IDs are case-sensitive), immediately corrected. Coupon params confirmed live: amount_off=$5.00 CAD, duration=repeating, duration_in_months=12, valid=true. `max_redemptions=None` (uncapped; see 2026-06-11 entry below for rationale).
+
+Checkout test confirmed via live Stripe API: price_1TPOe5F1e15xxqfqUgs0dbNE + FOUNDINGYEAR coupon → amount_total=499 cents ($4.99 CAD), amount_discount=500 cents, amount_subtotal=999 cents. No trial (`subscription_data=None`). Checkout pipeline is live-ready.
+
+12 vs 11 recipient delta explained: bare SQL (no delay gate) returned 12 candidates; conversion sweep dry-run returned 11. Missing user: `df3c1003-dc1d-46ba-ab58-71375c81b3f6`, `free_tier_used_at=2026-06-11 10:16 UTC` (< 24 hours ago). Excluded by `FIRE_DELAY_HOURS=24` cutoff in `conversion_sweep.py` — by design. No NULL `is_active` issue, no missing email fallback. `PAYWALL_EMAIL_DRY_RUN` remains `true`; live send awaits Dustin approval after checkout test.
+
 ### 2026-06-11 — Trial removed; FOUNDINGYEAR coupon confirmed; paywall sweep endpoint wired
 
 **AMENDED 2026-06-10 entry:** FOUNDINGYEAR coupon has `max_redemptions=None` (uncapped). "First 100" is marketing copy, not Stripe enforcement. Closing the offer is a manual decision: unset `FOUNDER_COUPON_ID` on Railway `spirited-youthfulness`.
