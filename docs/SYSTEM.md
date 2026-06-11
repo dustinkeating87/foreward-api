@@ -159,6 +159,16 @@ Backend changes do NOT belong in Lovable. Lovable holds only the frontend and on
 
 Append-only. Most recent at top. Updated automatically by Claude Code draining ClickUp list `901327295790`.
 
+### 2026-06-11 — Conversion path audit: billing.py amount fixed; two Lovable gaps flagged
+
+`send_paid_signup_email` in `_handle_checkout_completed` was hardcoded to `amount_cad=9.99`. Fixed to read `session.get("amount_total") / 100` — the actual post-discount Stripe amount — so founding members paying $4.99 get correct copy in the internal alert email. Fallback: 999 cents if `amount_total` absent. Committed a51d880.
+
+Two gaps flagged for Lovable action (pending Dustin approval):
+(1) Subscribe.tsx copy stuck at $9.99 — button label `:135`, default body `:105`, and Meta Pixel value `:49` all show $9.99 while the actual checkout charges $4.99 via FOUNDINGYEAR coupon. Copy mismatch creates friction for emailed users who were promised $4.99. Fix: Lovable prompt to update those strings.
+(2) Logged-out visitors hitting `/subscribe` (email CTA): `ProtectedRoute` redirects to `/auth?mode=signin` with no `returnTo` param; after sign-in `PublicOnly` sends them to `/dashboard`, purchase intent lost. Fix: pass `redirect=/subscribe` in `ProtectedRoute` redirect, read it after login in Auth.tsx. Both files are Lovable-owned.
+
+Logged-in non-active users (exact state of the 11 emailed users) correctly land on `/subscribe` with the working checkout button. Active-user redirect (`is_active && !sessionId`) is correctly scoped.
+
 ### 2026-06-11 — First live paywall sweep sent; PAYWALL_EMAIL_DRY_RUN flipped false
 
 First live conversion sweep executed 2026-06-11 13:43:56 UTC. `PAYWALL_EMAIL_DRY_RUN` flipped to `false` on Railway `spirited-youthfulness`. Sweep sent 11 emails (all qualifying users: `free_tier_used_at IS NOT NULL`, `paywall_email_sent_at IS NULL`, not active, not beta, fired >24h ago). All 11 delivered via SendGrid confirmed via activity API (status=delivered, 13:43:58–13:44:11 UTC). Recipients: brandon.kofman@gmail.com, cnolfi24@gmail.com, ecrsqvxs@sharklasers.com, jaygall@hotmail.com, jalild@me.com, jon.banack@gmail.com, matt.mamalyga@gmail.com, mkwarner@rogers.com, owen43@me.com, rsantoo@rogers.com, willtblanco@gmail.com. All 11 `user_profiles.paywall_email_sent_at` rows stamped at 2026-06-11 13:43:56.770319 UTC. User df3c1003 (fired today, <24h) correctly excluded and unstamped — will qualify on next sweep. No failures; no rows stamped without a confirmed send.
