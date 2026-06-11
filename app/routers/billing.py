@@ -38,14 +38,19 @@ def create_checkout_session(body: CheckoutSessionRequest, current_user=Depends(g
         "metadata": {"supabase_user_id": str(current_user.id)},
     }
     if settings.founder_coupon_id:
-        session_params["discounts"] = [{"coupon": settings.founder_coupon_id}]
+        # subscription_data.discounts attaches the coupon to the subscription
+        # so it recurs for the coupon's duration (12 months for FOUNDINGYEAR).
+        # Top-level session discounts only apply to the first invoice.
+        session_params["subscription_data"] = {
+            "discounts": [{"coupon": settings.founder_coupon_id}]
+        }
 
     try:
         session = stripe.checkout.Session.create(**session_params)
     except stripe.StripeError as e:
         if settings.founder_coupon_id:
             # Coupon rejected — retry at full price so checkout never blocks
-            session_params.pop("discounts", None)
+            session_params.pop("subscription_data", None)
             try:
                 session = stripe.checkout.Session.create(**session_params)
             except stripe.StripeError as e2:
