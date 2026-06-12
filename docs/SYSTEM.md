@@ -159,6 +159,32 @@ Backend changes do NOT belong in Lovable. Lovable holds only the frontend and on
 
 Append-only. Most recent at top. Updated automatically by Claude Code draining ClickUp list `901327295790`.
 
+### 2026-06-12 — Tee-on adopted as new platform; full fold-in committed, ForeUP deferred
+
+Tee-on platform recon complete (output: `foreward-scraper/recon/tee_on_platform.md`, commit c199142). Decision: build Tee-on as a new scraping platform and fold in every course it opens up — both NS Tee-on courses (Brunello, Glen Arbour) and the ~8 net-new Ontario courses (Toronto-area + Hamilton). Rationale: this is a platform bet, not an NS-only bet. The Ontario/Hamilton unlock justifies the build independent of the Nova Scotia launch decision, so the integration is not NS-contingent.
+
+Difficulty Class B: plain httpx, no Playwright, no captcha / no 2captcha spend. Two page-path variants exist and each course routes to one via a direct endpoint test: `AllTimesLanding` (simple, GET → JSESSIONID → POST `Date=YYYY-MM-DD` → parse HTML; Brunello's path) and `SearchSteps` (multi-step + Altcha proof-of-work, a ~5ms SHA-256 solve done in-process with stdlib — no vendor cost, no new dependency; Glen Arbour's path). No new external dependencies and no per-poll cost; cheaper to operate than GTG.
+
+NS coverage via Tee-on is the two marquee HRM anchors only — Brunello and Glen Arbour. The other NS targets (Northumberland Links, Granite Springs, Hartlen Point) are on other platforms; Granite Springs is ForeUP. Full HRM coverage via a ForeUP integration is deferred — not a launch blocker, since Brunello + Glen Arbour are the most-wanted HRM weekend courses.
+
+Build sequence (Claude Code): (1) AllTimesLanding path + routing test across all targets + ship all easy-path courses; (2) SearchSteps/Altcha path + remaining courses; (3) wire to ALERTING_PLATFORMS + polling cadence + live verification + course-picker frontend (Lovable prompt). Live state — which courses are live and ALERTING_PLATFORMS membership — is read from source per the Pointers table, not frozen here.
+
+### 2026-06-12 — Tee-on platform recon complete; Class B; 2/5 NS targets; ~8 Ontario net-new
+
+Recon output: `foreward-scraper/recon/tee_on_platform.md` (commit c199142 on `foreward-scraper` main).
+
+Platform: Tee-on (`www.tee-on.com`). Difficulty: Class B — plain httpx, no Playwright, no datacenter IP block on Webshare YYZ proxy (confirmed).
+
+Two booking flows exist (course-level config):
+- **WebBookingAllTimesLanding** (Brunello confirmed): GET for JSESSIONID → POST with `Date=YYYY-MM-DD` body param. Server-rendered HTML. No CAPTCHA. Proven working this session.
+- **WebBookingSearchSteps** (Glen Arbour + all other confirmed NS/ON courses): Same session flow, but requires Altcha SHA-256 proof-of-work challenge solve before POST. Altcha is pure PoW (no fingerprinting) — automatable with ~20 lines of Python, no 2captcha spend. Difficulty 10, maxnumber 100,000.
+
+NS coverage (5 scarce HRM targets): 2 of 5 on Tee-on — Brunello (TLAB/10789, AllTimesLanding) and Glen Arbour (GLAR/10127, SearchSteps). Granite Springs (ForeUP), Hartlen Point (phone only), Northumberland Links (Chronogolf) are not on Tee-on. 14 NS Tee-on courses total (6 in HRM).
+
+Ontario/GTA net-new: ~8 courses Tee-on would unlock that aren't in current courses.py: 3 Toronto-area (Oakville Executive OEGC/10621, Pheasant Run PHEA/10087, Turtle Creek TUCR/10136) + 5 Hamilton-area. All on SearchSteps+Altcha.
+
+Brunello scarcity confirmed on live Tee-on data: Jun 14 Saturday showed only 5 × 18-hole AM slots before noon (7:00, 7:10, 7:30, 8:10, 9:40). Booking window opens 7 days out at 6:30 AM local.
+
 ### 2026-06-12 — Geographic expansion un-shelved; Nova Scotia chosen as first out-of-region market; Vancouver rejected, Montreal deferred
 
 Out-of-GTA expansion is the next growth push, reversing the prior "geographic expansion shelved until activation/conversion improve" stance. Justified by sustainable monthly burn (~$100/mo per Dustin) and the fact that adding courses on already-scraped platforms (GolfNow, Chronogolf) is low-effort. Decision driver: Toronto's slow uptake is understood as a category/audience problem (easy-to-clone service, hostile enthusiast community, GTG/city-course wedge muzzled by the City of Toronto takedown request) rather than something more Toronto reach fixes.

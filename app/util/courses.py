@@ -169,6 +169,8 @@ COURSES: dict[str, dict[str, str]] = {
     "bayview-golf-country-club": {"display_name": "Bayview Golf & Country Club", "platform": "chronogolf"},
     "mill-run-golf-club-ontario": {"display_name": "Mill Run Golf Club", "platform": "chronogolf"},
     "eldorado-golf-club": {"display_name": "Eldorado Golf Club", "platform": "chronogolf"},
+    # ── Tee-on (AllTimesLanding courses — SearchSteps courses added session 2) ──
+    "the-links-at-brunello": {"display_name": "The Links at Brunello", "platform": "teeon"},
     # ── GTG (display names advisory — gateway API is authoritative at runtime) ─
     "dentonia-park":  {"display_name": "Dentonia Park Golf Course",  "platform": "gtg"},
     "don-valley":     {"display_name": "Don Valley Golf Course",     "platform": "gtg"},
