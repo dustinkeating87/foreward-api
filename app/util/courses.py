@@ -169,8 +169,20 @@ COURSES: dict[str, dict[str, str]] = {
     "bayview-golf-country-club": {"display_name": "Bayview Golf & Country Club", "platform": "chronogolf"},
     "mill-run-golf-club-ontario": {"display_name": "Mill Run Golf Club", "platform": "chronogolf"},
     "eldorado-golf-club": {"display_name": "Eldorado Golf Club", "platform": "chronogolf"},
-    # ── Tee-on (AllTimesLanding courses — SearchSteps courses added session 2) ──
-    "the-links-at-brunello": {"display_name": "The Links at Brunello", "platform": "teeon"},
+    # ── Tee-on ───────────────────────────────────────────────────────────────────
+    # NS / HRM
+    "the-links-at-brunello":      {"display_name": "The Links at Brunello",             "platform": "teeon"},
+    "glen-arbour-golf-club":      {"display_name": "Glen Arbour Golf Club",              "platform": "teeon"},
+    # Ontario / Toronto-area
+    "oakville-executive-golf-courses": {"display_name": "Oakville Executive Golf Courses", "platform": "teeon"},
+    "pheasant-run-golf-club":     {"display_name": "Pheasant Run Golf Club",             "platform": "teeon"},
+    "turtle-creek-golf-club":     {"display_name": "Turtle Creek Golf Club",             "platform": "teeon"},
+    # Ontario / Hamilton-area
+    "flamborough-hills-golf-club": {"display_name": "Flamborough Hills Golf Club",       "platform": "teeon"},
+    "granite-ridge-golf-club":    {"display_name": "Granite Ridge Golf Club",            "platform": "teeon"},
+    "copetown-woods-golf-club":   {"display_name": "Copetown Woods Golf Club",           "platform": "teeon"},
+    "crosswinds-golf-country-club": {"display_name": "Crosswinds Golf & Country Club",   "platform": "teeon"},
+    "willow-valley-golf-course":  {"display_name": "Willow Valley Golf Course",          "platform": "teeon"},
     # ── GTG (display names advisory — gateway API is authoritative at runtime) ─
     "dentonia-park":  {"display_name": "Dentonia Park Golf Course",  "platform": "gtg"},
     "don-valley":     {"display_name": "Don Valley Golf Course",     "platform": "gtg"},
