@@ -159,6 +159,38 @@ Backend changes do NOT belong in Lovable. Lovable holds only the frontend and on
 
 Append-only. Most recent at top. Updated automatically by Claude Code draining ClickUp list `901327295790`.
 
+### 2026-06-12 — Geographic expansion un-shelved; Nova Scotia chosen as first out-of-region market; Vancouver rejected, Montreal deferred
+
+Out-of-GTA expansion is the next growth push, reversing the prior "geographic expansion shelved until activation/conversion improve" stance. Justified by sustainable monthly burn (~$100/mo per Dustin) and the fact that adding courses on already-scraped platforms (GolfNow, Chronogolf) is low-effort. Decision driver: Toronto's slow uptake is understood as a category/audience problem (easy-to-clone service, hostile enthusiast community, GTG/city-course wedge muzzled by the City of Toronto takedown request) rather than something more Toronto reach fixes.
+
+**Market scan findings (durable):**
+
+- **Vancouver — rejected.** Not whitespace. Incumbent alert services already operate there: Tee Time Buddy (near-identical freemium model — free single alert, paid SMS/multi-course — across Metro Vancouver) and Snag Your Tee (9 Metro Vancouver public courses incl. Langara/Fraserview/McCleery). Entering means fighting incumbents on their home turf with no local channel presence.
+- **Calgary — wedge undercut.** The City of Calgary golf app has a native standby/notify feature on municipal courses, so the acute-pain wedge is self-served. Private Chronogolf courses remain addressable but milder pain.
+- **Montreal — deferred, not rejected.** Deeply covered by Chronogolf (its home market); no dedicated alert competitor found. Deferred because: (1) French market — Bill 96 (OQLF enforcement incentive/complaint-based for businesses with no Quebec establishment; practical risk low; fr-CA toggle resolves cheaply); (2) Lightspeed/Chronogolf home turf raises native-feature risk. Dustin is willing to run English ads there and add French later if NS proves the model.
+
+**Chosen path: Nova Scotia first.** English, no alert competitor found, documented acute weekend scarcity (The Links at Brunello reviews: ~3 weeks out, first weekend availability often 4pm+). Small but clean market — the purest test of "does owning uncontested whitespace convert better than being one of three in Toronto." Start Halifax metro, expand province-wide (demand is HRM-weighted — Cape Breton resort courses like Cabot/Highlands Links/Bell Bay/Fox Harb'r are tourist-demand, not weekend-cancellation demand).
+
+**Strategic positioning candidate:** be the only national Canadian tee-time alert service — every competitor found (Tee Time Buddy, Snag Your Tee, Brio) is single-city. "Tee-time alerts anywhere in Canada, one app" is a story the hyperlocal players structurally can't tell.
+
+**Category caveat (lesson for future sessions):** tee-time alerting is easy to clone (multiple independent services across US/Canada) and booking platforms are absorbing it natively (Calgary standby, Vancouver waitlist, Gallus "Standby" integrates with tee sheets). The demand/willingness-to-pay question follows the product to every market; changing cities relocates it, doesn't solve it.
+
+### 2026-06-11 — Founder funnel shipped and verified e2e; trial removed; full email price sweep
+
+The 30-day Stripe trial was removed entirely (`billing.py`); confirmed no trial exists at the price or in checkout code. The founding-member offer went live: FOUNDINGYEAR coupon ($5 CAD off, repeating 12 months, **uncapped** — "first 100" is marketing, not Stripe-enforced), auto-applied at checkout behind `FOUNDER_COUPON_ID` on spirited-youthfulness. Verified on real invoice and subscription data (not page copy): checkout shows $4.99, charges $4.99, and the coupon attaches to the subscription for a 365-day recurring discount. **Top-level session `discounts` is the correct field for subscription-mode Checkout; `subscription_data.discounts` is silently ignored — do not "fix" this again.** One real founding member (cnolfi24) converted during the session, correctly on $4.99 for the year.
+
+The paywall conversion email was wired to a grace-retry branch that 0 users hit, so it had never fired despite 12 users consuming their free alert. Built a daily sweep (`/scraper/send-paywall-emails`, gated on `FREE_TIER_ENABLED`, `PAYWALL_EMAIL_DRY_RUN` flag, stamps `paywall_email_sent_at` on success only, auth-email fallback chain). Sent live: 11/11 delivered. A 24h `FIRE_DELAY_HOURS` gate correctly holds a just-fired user back to the next sweep.
+
+Price sweep: every outbound email and the recurring charge were audited — not just the checkout page and the in-focus email. Stale $9.99 copy was corrected in `send_paywall_email`, `send_free_tier_fired_email` (scraper, tee_sniper.py), and the welcome email's hardcoded amount. Subscribe page and Account-inactive flow copy updated to $4.99 via Lovable (Account founder-link deferred on Lovable credits).
+
+Two process lessons: (1) A price change must be verified on the recurring invoice and swept across every email surface — verifying the checkout page and the in-focus email is insufficient; this session shipped two emails still on $9.99 after the initial "copy fix." (2) A diagnosis hypothesis is not fact until tested: a recurring-billing "bug" was escalated and a fix deployed that was itself the breakage (zero-discount sessions), caught and reverted within the same window (49ad500 to 0a5192a, no real users affected). Hold the systematic-debugging line — confirm before fixing.
+
+_Doc amendment:_ the 2026-06-10 entry and locked-decisions row stating the cap is "honored via Stripe max_redemptions=100" are superseded — the coupon is uncapped; closing the offer is a manual unset of `FOUNDER_COUPON_ID`.
+
+### 2026-06-11 — Test account created for founder checkout walk; cleanup required
+
+Test account `dustinkeating87+test@gmail.com` (Supabase ID `860cfc42-9bd1-466e-b26d-cb243a382e19`) created 2026-06-11 to walk the $4.99 FOUNDINGYEAR founder checkout flow. Set up in paywall state (`free_tier_used_at` stamped, `is_active=false`, phone_verified manually bypassed). Cleanup required: cancel Stripe subscription + refund if payment completed, delete Stripe customer, delete auth user in Supabase dashboard (user_profiles cascades on auth delete). Steps tracked in ClickUp task wdpu2y8vbk.
+
 ### 2026-06-11 — Conversion path audit: billing.py amount fixed; two Lovable gaps flagged
 
 `send_paid_signup_email` in `_handle_checkout_completed` was hardcoded to `amount_cad=9.99`. Fixed to read `session.get("amount_total") / 100` — the actual post-discount Stripe amount — so founding members paying $4.99 get correct copy in the internal alert email. Fallback: 999 cents if `amount_total` absent. Committed a51d880.
