@@ -173,6 +173,10 @@ COURSES: dict[str, dict[str, str]] = {
     # NS / HRM
     "the-links-at-brunello":      {"display_name": "The Links at Brunello",             "platform": "teeon"},
     "glen-arbour-golf-club":      {"display_name": "Glen Arbour Golf Club",              "platform": "teeon"},
+    "airlane-golf-club":          {"display_name": "Airlane Golf Club",                 "platform": "teeon"},
+    "fox-hollow-golf-club-ns":    {"display_name": "Fox Hollow Golf Club",              "platform": "teeon"},
+    "indian-lake-golf-course":    {"display_name": "Indian Lake Golf Course",           "platform": "teeon"},
+    "lost-creek-golf-club":       {"display_name": "Lost Creek Golf Club",              "platform": "teeon"},
     # Ontario / Toronto-area
     "oakville-executive-golf-courses": {"display_name": "Oakville Executive Golf Courses", "platform": "teeon"},
     "pheasant-run-golf-club":     {"display_name": "Pheasant Run Golf Club",             "platform": "teeon"},
