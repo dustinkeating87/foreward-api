@@ -159,6 +159,20 @@ Backend changes do NOT belong in Lovable. Lovable holds only the frontend and on
 
 Append-only. Most recent at top. Updated automatically by Claude Code draining ClickUp list `901327295790`.
 
+### 2026-06-13 — Tee-on NS HRM go-live: 5 courses onboarded, LOST extended flow shipped
+
+Code shipped: foreward-scraper commit `6cb9972`, foreward-api commit `2b36d72`.
+
+NS launched as HRM region. 5 courses wired into TEEON_COURSES (active=True) and courses.py, poll loop integrated in tee_sniper.py: TLAB (Brunello, already live), AIRL (Airlane), FOHO (Fox Hollow), ILGC (Indian Lake), LOST (Lost Creek). GLAR (Glen Arbour) set active=False — routes to ATL publicly but club offers no public tee times. ForeUP (Granite Springs) and Chronogolf NS deferred.
+
+New flow ss_ext shipped for LOST: Steps 1-6 identical to ss; Step 7a GET WebBookingSearchSteps?FromTrailSearch=true&CourseGroupID={gid}&Date={date}; Step 7b GET WebBookingAllTimesLanding with empty CourseCode (CourseCode=, server resolves from session). Lesson: `CourseCode={code}` returns 622-byte session timeout for LOST; empty string returns full tee sheet. ComboLanding routing pre-check is unreliable for HRM courses (all return HTTP 404).
+
+Live verification (all PASS, Jun 14 2026-06-13): TLAB 42 slots 4 AM 18H; AIRL 26 slots 1 AM 18H; FOHO 72 slots 3 AM 18H; ILGC 6 slots 0 AM 18H (AM sold out — high scarcity); LOST 92 slots 15 AM 18H first=6:39am.
+
+courses.py: airlane-golf-club, fox-hollow-golf-club-ns, indian-lake-golf-course, lost-creek-golf-club added as platform=teeon.
+
+Next step: course-picker frontend (Lovable) — NS courses are monitored but not selectable until picker ships.
+
 ### 2026-06-12 — Tee-on adopted as new platform; full fold-in committed, ForeUP deferred
 
 Tee-on platform recon complete (output: `foreward-scraper/recon/tee_on_platform.md`, commit c199142). Decision: build Tee-on as a new scraping platform and fold in every course it opens up — both NS Tee-on courses (Brunello, Glen Arbour) and the ~8 net-new Ontario courses (Toronto-area + Hamilton). Rationale: this is a platform bet, not an NS-only bet. The Ontario/Hamilton unlock justifies the build independent of the Nova Scotia launch decision, so the integration is not NS-contingent.
