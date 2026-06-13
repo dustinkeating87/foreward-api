@@ -170,23 +170,18 @@ COURSES: dict[str, dict[str, str]] = {
     "mill-run-golf-club-ontario": {"display_name": "Mill Run Golf Club", "platform": "chronogolf"},
     "eldorado-golf-club": {"display_name": "Eldorado Golf Club", "platform": "chronogolf"},
     # ── Tee-on ───────────────────────────────────────────────────────────────────
-    # NS / HRM
+    # NS / HRM (live-verified 2026-06-13)
     "the-links-at-brunello":      {"display_name": "The Links at Brunello",             "platform": "teeon"},
-    "glen-arbour-golf-club":      {"display_name": "Glen Arbour Golf Club",              "platform": "teeon"},
     "airlane-golf-club":          {"display_name": "Airlane Golf Club",                 "platform": "teeon"},
     "fox-hollow-golf-club-ns":    {"display_name": "Fox Hollow Golf Club",              "platform": "teeon"},
     "indian-lake-golf-course":    {"display_name": "Indian Lake Golf Course",           "platform": "teeon"},
     "lost-creek-golf-club":       {"display_name": "Lost Creek Golf Club",              "platform": "teeon"},
-    # Ontario / Toronto-area
-    "oakville-executive-golf-courses": {"display_name": "Oakville Executive Golf Courses", "platform": "teeon"},
-    "pheasant-run-golf-club":     {"display_name": "Pheasant Run Golf Club",             "platform": "teeon"},
-    "turtle-creek-golf-club":     {"display_name": "Turtle Creek Golf Club",             "platform": "teeon"},
-    # Ontario / Hamilton-area
-    "flamborough-hills-golf-club": {"display_name": "Flamborough Hills Golf Club",       "platform": "teeon"},
-    "granite-ridge-golf-club":    {"display_name": "Granite Ridge Golf Club",            "platform": "teeon"},
-    "copetown-woods-golf-club":   {"display_name": "Copetown Woods Golf Club",           "platform": "teeon"},
-    "crosswinds-golf-country-club": {"display_name": "Crosswinds Golf & Country Club",   "platform": "teeon"},
-    "willow-valley-golf-course":  {"display_name": "Willow Valley Golf Course",          "platform": "teeon"},
+    # Ontario / Toronto-area (live-verified 2026-06-13)
+    "pheasant-run-golf-club":     {"display_name": "Pheasant Run Golf Club",            "platform": "teeon"},
+    # Ontario / Hamilton-area (live-verified 2026-06-13)
+    "granite-ridge-golf-club":    {"display_name": "Granite Ridge Golf Club",           "platform": "teeon"},
+    "crosswinds-golf-country-club": {"display_name": "Crosswinds Golf & Country Club",  "platform": "teeon"},
+    "willow-valley-golf-course":  {"display_name": "Willow Valley Golf Course",         "platform": "teeon"},
     # ── GTG (display names advisory — gateway API is authoritative at runtime) ─
     "dentonia-park":  {"display_name": "Dentonia Park Golf Course",  "platform": "gtg"},
     "don-valley":     {"display_name": "Don Valley Golf Course",     "platform": "gtg"},
