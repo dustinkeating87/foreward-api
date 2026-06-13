@@ -159,6 +159,24 @@ Backend changes do NOT belong in Lovable. Lovable holds only the frontend and on
 
 Append-only. Most recent at top. Updated automatically by Claude Code draining ClickUp list `901327295790`.
 
+### 2026-06-13 — NS+PEI Chronogolf + NS GolfNow onboarding: 37 new courses live
+
+Code shipped: foreward-scraper commit `d89517b`, foreward-api commit `7381760`.
+
+**Chronogolf club_id resolution method:** Fully programmatic via Chronogolf marketplace API pagination (`GET /marketplace/clubs`, 771 pages × 25/page = 19,274 clubs total). Each club entry includes `{id, slug, name, province_name, courses[{id, holes}], settings.default_affiliation_type_id}` — all three values needed for the scraper (club_id, course_id, affiliation_type_id) in a single response. 31/41 target NS+PEI slugs resolved. 8 NS slugs absent from marketplace (osprey-ridge, chester, northumberland-links, amherst, berwick-heights, paragon, fort-view, annapolis-royal) — white-label/embedded widgets; Northumberland (17057) and Amherst (19634) found via website widget scrape but teetimes → 422 "player type invalid" with unknown affiliation_type_ids. Not onboarded.
+
+**NS Mainland Chronogolf (10 courses, live-verified 2026-06-13):** Abercrombie CC (17068/19530/70845), Brookfield Golf & CC (18149/21137/84471), Eagle Crest (17204/19695/75187), Eden Golf & CC (18811/22698/105582), Greenwood Golf Club (18006/20586/80175), Truro Golf Club (18045/20945/81813), West Pubnico Golf & CC (19165/23778/122424), Antigonish Golf & CC (17071/19534/71031), White Point Golf Club [9h] (19383/26887/130093), The Links at Montague [HRM, 9h] (17200/19689/75137). Format: club_id/course_id/affiliation_type_id.
+
+**PEI Chronogolf (24 courses, live-verified 2026-06-13):** Andersons Creek (1362/1534/6165), Avondale (1370/1545/6197), Belfast Highland Greens [9h] (1382/1559/6245), Belvedere (1385/1562/102345), Clyde River (1375/1550/6217), Countryview (1376/1553/6221), Eagles Glenn (1366/1540/6181), Eagles View [9h] (1381/1558/6241), Forest Hills [9h] (1387/1564/6265), Fox Meadow (1367/1542/6185), French River (1379/1556/6233), Glasgow Hills (1363/1535/6169), Glen Afton (1377/1554/6225), Green Gables (1364/1536/6173), Mill River Resort (18961/23168/112508), Red Sands [9h] (1372/1547/6205), Rodd Brudenell River (1365/1537/6177), Rustico Resort (1373/1548/6209), Serenity Valley [9h] (1380/1557/6237), Stanhope (1374/1549/6213), Strathgartney Highlands [9h] (1386/1563/6261), Summerside (1383/1560/6249), The Links at Crowbush Cove (1369/1544/6193), VistaBay [9h] (1378/1555/6229).
+
+**NS GolfNow (3 courses, live-verified 2026-06-13):** Ken-Wo Golf Club (13032), Clare Golf & Country Club (11295), River Hills Golf & Country Club (17436). Brookfield covered by Chronogolf above; GolfNow facility_id 11603 skipped.
+
+**Polling wiring:** Both Chronogolf and GolfNow already in tee_sniper.py poll loop — no tee_sniper.py changes needed.
+
+**/courses confirmed:** 198 total courses (was ~161). All 37 new courses present. Short-window booking restriction (3–4 day windows) confirmed working — 422 "booking range" errors confirm correct affiliation_type_ids; scraper handles gracefully.
+
+---
+
 ### 2026-06-13 — Tee-on NS HRM go-live: 5 courses onboarded, LOST extended flow shipped
 
 Code shipped: foreward-scraper commit `6cb9972`, foreward-api commit `2b36d72`.
