@@ -169,6 +169,10 @@ COURSES: dict[str, dict[str, str]] = {
     "bayview-golf-country-club": {"display_name": "Bayview Golf & Country Club", "platform": "chronogolf"},
     "mill-run-golf-club-ontario": {"display_name": "Mill Run Golf Club", "platform": "chronogolf"},
     "eldorado-golf-club": {"display_name": "Eldorado Golf Club", "platform": "chronogolf"},
+    # ── Chronogolf / Muskoka (live-verified 2026-06-27) ─────────────────────────
+    "muskoka-highlands":           {"display_name": "Muskoka Highlands Golf Links",  "platform": "chronogolf"},
+    "the-fairways-at-kirrie-glen": {"display_name": "The Fairways at Kirrie Glen",   "platform": "chronogolf"},
+    "diamond-in-the-ruff":         {"display_name": "Diamond in the Ruff",           "platform": "chronogolf"},
     # ── Tee-on ───────────────────────────────────────────────────────────────────
     # NS / HRM (live-verified 2026-06-13)
     "the-links-at-brunello":      {"display_name": "The Links at Brunello",             "platform": "teeon"},
