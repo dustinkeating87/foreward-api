@@ -159,6 +159,18 @@ Backend changes do NOT belong in Lovable. Lovable holds only the frontend and on
 
 Append-only. Most recent at top. Updated automatically by Claude Code draining ClickUp list `901327295790`.
 
+### 2026-07-22 — Northumberland Links (Pugwash, NS) onboarded to Chronogolf scraper
+
+Code shipped: foreward-scraper commit `3c3958d`, foreward-api commit `b8554e4`.
+
+**Triple:** club_id=17057, course_id=19508, affiliation_type_id=70544 ("Public"), 18h, course_key=`northumberland-links`. Live-verified 2026-07-24: HTTP 200, 74 slots, 07:09 bookable (07:00 out_of_capacity).
+
+**422 root cause (corrects 2026-06-13 entry):** Northumberland Links was absent from Chronogolf marketplace pagination, so affiliation_type_id was unknown on 2026-06-13. The correct Public type (70544) is visible in `green_fees` of any valid teetimes response. Marketplace listing is not required — anonymous GET with the correct triple returns a full public tee sheet.
+
+**Remaining 7 white-label NS slugs (deferred):** osprey-ridge, chester, amherst, berwick-heights, paragon, fort-view, annapolis-royal. Same resolution path: `chronogolf.com/club/<slug>` teetimes XHR exposes the full triple.
+
+---
+
 ### 2026-06-13 — NS+PEI Chronogolf + NS GolfNow onboarding: 37 new courses live
 
 Code shipped: foreward-scraper commit `d89517b`, foreward-api commit `7381760`.
