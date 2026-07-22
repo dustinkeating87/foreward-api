@@ -196,6 +196,7 @@ COURSES: dict[str, dict[str, str]] = {
     "west-pubnico-golf-country-club-nova-scotia-pubnico": {"display_name": "West Pubnico Golf & Country Club", "platform": "chronogolf"},
     "antigonish-golf-country-club":     {"display_name": "Antigonish Golf & Country Club",      "platform": "chronogolf"},
     "white-point-golf-club":            {"display_name": "White Point Golf Club",               "platform": "chronogolf"},
+    "northumberland-links":             {"display_name": "Northumberland Links",                 "platform": "chronogolf"},
     # ── Chronogolf / PEI (confirmed public tee times 2026-06-13) ─────────────────
     "eagles-glenn-golf-resort":         {"display_name": "Eagles Glenn Golf Resort",            "platform": "chronogolf"},
     "fox-meadow-golf-course":           {"display_name": "Fox Meadow Golf Course",              "platform": "chronogolf"},
