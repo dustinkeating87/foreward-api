@@ -159,6 +159,20 @@ Backend changes do NOT belong in Lovable. Lovable holds only the frontend and on
 
 Append-only. Most recent at top. Updated automatically by Claude Code draining ClickUp list `901327295790`.
 
+### 2026-07-26 — Chronogolf capacity semantics: per-party-size fetch (false-positive alert fix)
+
+Code shipped: foreward-scraper commit `f972889`.
+
+**Root cause:** Chronogolf's teetimes endpoint does not return a remaining-player-count field. Capacity is communicated as a boolean: `out_of_capacity: true` means the requested party cannot book; `out_of_capacity: false` means it can. The API determines which boolean to return based on how many times `affiliation_type_ids[]` appears in the query — repeating the affiliation ID N times signals an N-player party request. The scraper always sent the parameter once (party size = 1), then hardcoded `AvailableSlot = "1-4"`. The matcher parsed `"1-4"` as max = 4, so `avail (4) < alert.players (4)` was always false — the capacity gate never fired. Every non-fully-booked Chronogolf slot would fire a 4-player alert, even one with only 1 remaining spot.
+
+**Live verification (2026-08-02, Northumberland Links):** 1x request returned 60 bookable slots; 4x request returned 52 bookable slots. 8 slots had `out_of_capacity=False` at 1x and `out_of_capacity=True` at 4x — confirming partial-capacity slots exist and that repeated `affiliation_type_ids[]` controls capacity filtering server-side.
+
+**Fix (chronogolf_scraper.py + tee_sniper.py):** `_build_url` now repeats `affiliation_type_ids[]` n_players times. `_normalize_slot` tags each slot with `AvailableSlot = verified_players` (int) and `verified_players = verified_players`. `poll_chronogolf_tee_times` groups `target_searches` by date to get distinct party sizes and does one fetch per `(course, date, party_size)` triple. `slot_matches_profile` uses exact equality (`slot.verified_players == alert.players`) for Chronogolf slots instead of `AvailableSlot >= players`; non-Chronogolf platforms unchanged. `fire_alert` writes `slot.verified_players` to `sent_slots.players` for Chronogolf slots. `AvailableSlot=None` or unparseable values on any platform log WARN and fail open; counted in `_capacity_unknown_counts`.
+
+**GolfNow / Tee-on status:** Both have real capacity data. GolfNow reads `teeTimeRates[0].playerRule` (e.g., `"ThreeFour"`), Tee-on parses `<div class="players-allowed">` from HTML. Neither uses a placeholder. No changes needed.
+
+---
+
 ### 2026-07-22 — Northumberland Links (Pugwash, NS) onboarded to Chronogolf scraper
 
 Code shipped: foreward-scraper commit `3c3958d`, foreward-api commit `b8554e4`.
@@ -168,6 +182,16 @@ Code shipped: foreward-scraper commit `3c3958d`, foreward-api commit `b8554e4`.
 **422 root cause (corrects 2026-06-13 entry):** Northumberland Links was absent from Chronogolf marketplace pagination, so affiliation_type_id was unknown on 2026-06-13. The correct Public type (70544) is visible in `green_fees` of any valid teetimes response. Marketplace listing is not required — anonymous GET with the correct triple returns a full public tee sheet.
 
 **Remaining 7 white-label NS slugs (deferred):** osprey-ridge, chester, amherst, berwick-heights, paragon, fort-view, annapolis-royal. Same resolution path: `chronogolf.com/club/<slug>` teetimes XHR exposes the full triple.
+
+---
+
+### 2026-07-22 — Scraper idle signature: all-zero slots_last_poll with empty counters is alert-driven idle, not an outage
+
+The scraper polls only courses referenced by live alerts. When zero live alerts exist systemwide, the diagnostic signature is: `slots_last_poll` all zeros across every platform, `consecutive_zero_polls` EMPTY (not climbing), `per_platform_alarm_active` all false, heartbeat current. This is idle, not failure. A genuine multi-platform outage climbs the zero-poll counters and trips per-platform alarms.
+
+Observed live 2026-07-22: all four platforms at 0, counters empty, heartbeat current, `last_productive_poll` matching the last day a live alert existed (Jul 18). Confirmed against `alert_profiles`: zero rows with `active=true AND status NOT IN ('fired','expired')`.
+
+Corollary: post-deploy scrape-cycle verification of a newly added course is impossible until a live alert references it; the pre-ship check is a one-off probe through the scraper's request path.
 
 ---
 
