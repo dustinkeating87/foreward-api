@@ -168,6 +168,8 @@ async def scraper_heartbeat(request: Request):
     if "gtg_scrape_success" in body:
         _gss = body["gtg_scrape_success"]
         upsert_data["gtg_scrape_success"] = None if _gss is None else bool(_gss)
+    if "proxy_auth_failed" in body:
+        upsert_data["proxy_auth_failed"] = bool(body["proxy_auth_failed"])
 
     # ── Per-platform alarm decisions ──────────────────────────────────────────
     new_streaks: dict = body.get("consecutive_zero_polls") or {}
@@ -223,6 +225,26 @@ async def scraper_heartbeat(request: Request):
                 log.info("sitekey recovery email sent")
         except Exception as exc:
             log.error("sitekey alarm email failed: %s", exc)
+
+    if "proxy_auth_failed" in body:
+        new_paf = bool(body["proxy_auth_failed"])
+        prev_paf = bool(prev_data.get("proxy_auth_failed", False))
+        try:
+            if not prev_paf and new_paf:
+                send_email(
+                    alarm_to,
+                    "[Good Lie] Proxy 407 — authentication failure",
+                    (
+                        "One or more scrapers received a 407 Proxy Authentication Required response.\n\n"
+                        "The Webshare proxy credentials may have expired or the account is suspended.\n\n"
+                        "Check: https://proxy.webshare.io/\n\n"
+                        f"Admin dashboard: {admin_url}"
+                    ),
+                    from_addr=alarm_from,
+                )
+                log.info("proxy 407 alarm email sent")
+        except Exception as exc:
+            log.error("proxy auth alarm email failed: %s", exc)
 
     try:
         await maybe_check_and_alert(supabase_admin)
