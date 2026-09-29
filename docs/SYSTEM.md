@@ -78,9 +78,9 @@ Backend changes do NOT belong in Lovable. Lovable holds only the frontend and on
 
 ## Polling cadence
 
-- Base poll loop: **30 seconds** (configurable via `POLL_INTERVAL_SECONDS`)
+- Base poll loop: configurable via `POLL_INTERVAL_SECONDS` env var on Railway `resourceful-delight` (observed ~60s; doc previously said 30s — that value had drifted)
 - GTG loop: **900 seconds / 15 minutes** (configurable via `GTG_POLL_INTERVAL_SECONDS`)
-- GolfNow and Chronogolf run at the 30s base tick (pure httpx, no captcha cost)
+- GolfNow and Chronogolf run at the base tick (pure httpx, no captcha cost)
 - GTG runs its own decoupled timer to control 2captcha spend
 
 ---
