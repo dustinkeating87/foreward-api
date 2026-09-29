@@ -143,7 +143,6 @@ COURSES: dict[str, dict[str, str]] = {
     "north-halton-country-club": {"display_name": "North Halton Country Club", "platform": "chronogolf"},
     "harbor-view-golf-country-club": {"display_name": "Harbor View Golf & Country Club", "platform": "chronogolf"},
     "dragon-s-fire-golf-club": {"display_name": "Dragon's Fire Golf Club - DO NOT USE", "platform": "chronogolf"},
-    "hornby-glen-golf-course": {"display_name": "Hornby Glen Golf Course", "platform": "chronogolf"},
     "wyldewood-golf-country-club": {"display_name": "Wyldewood Golf & Country Club", "platform": "chronogolf"},
     "carrying-place-country-club": {"display_name": "Carrying Place Country Club", "platform": "chronogolf"},
     "cardinal-golf-club-redcrest": {"display_name": "Cardinal Golf Complex – RedCrest", "platform": "chronogolf"},
