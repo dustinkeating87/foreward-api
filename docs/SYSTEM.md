@@ -159,6 +159,30 @@ Backend changes do NOT belong in Lovable. Lovable holds only the frontend and on
 
 Append-only. Most recent at top. Updated automatically by Claude Code draining ClickUp list `901327295790`.
 
+### 2026-09-29 — Chronogolf GTA registry repair: 40 removed, 10 triples corrected, 8 picker-only courses activated
+
+Root cause of 45 GTA Batch 1 failures (added 2026-05-13): all 45 courses shared affiliation_type_id=5285 — Lionhead's public visitor type. Chronogolf affil IDs are per-club; 5285 is valid only for Lionhead. All 45 returned 422 "Player type provided is not valid" and had never been polled successfully.
+
+Repair: paginated all 19,330 Chronogolf marketplace clubs via `GET /marketplace/clubs?page=N` (~771 pages, async 20-concurrent, ~40s). Matched 62/86 target courses by slug or name. Used marketplace `online_booking_enabled` boolean as definitive no-booking check (replaces HTML text-pattern approach). Re-probed each matched course on 3 dates (+2/+4/+7 from 2026-09-29) with marketplace-resolved triples, 1 player, 1.5s pace.
+
+Results:
+- **7 GTA KEEP — affil corrected only** (club/course IDs unchanged): Oak Gables (1314/1475/75604), Carlisle North (1216/19814/5581), Kirby Links (19269/24076/126531), Oshawa (19106/23654/119313), Summerlea (18465/21882/95766), Ballantrae (1120/1194/5197), Mill Run (18864/22881/108637). All PASS 3/3 dates.
+- **3 TPC Osprey Valley KEEP — affil updated 10987 → 109872** (club_id=18891, course IDs unchanged). All PASS.
+- **8 formerly picker-only courses activated in scraper**: Stonehenge (1124/1198/5213), Goreway/parkshore (1145/1228/5297), Banty's Roost (19628/27710/142914), Cardinal×4 (1321/1485-1488/6001), Royal Ontario (1302/1459/5925).
+- **38 removed**: 30 have `online_booking_enabled=False`; 8 not in marketplace.
+- **Carlisle South/East deduped**: marketplace resolves one course_id (19814) for all three Carlisle slugs; South/East removed.
+
+Total Chronogolf: 71 → 39 active. CI key sync: scraper ↔ courses.py = 39, 0 drift.
+Code: foreward-scraper commit c4b0246, foreward-api commit fafe79d.
+
+Alert impact: 15 alerts referenced affected slugs (14 fired, 1 active). All 14 fired through other courses — the broken courses never contributed to a fire. 1 active alert (id=1391d803, created 2026-09-26) references only Cardinal courses — now live for first time.
+
+**New locked decisions:**
+- Chronogolf affiliation_type_id is per-club; never share across clubs. Marketplace `GET /marketplace/clubs?page=N` → `settings.default_affiliation_type_id` gives the correct per-club value.
+- Marketplace `online_booking_enabled=False` is the definitive no-public-booking check; HTML text-pattern approach is retired.
+
+---
+
 ### 2026-07-26 — Chronogolf capacity semantics: per-party-size fetch (false-positive alert fix)
 
 Code shipped: foreward-scraper commit `f972889`.
