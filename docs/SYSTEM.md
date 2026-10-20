@@ -152,12 +152,41 @@ Backend changes do NOT belong in Lovable. Lovable holds only the frontend and on
 | slug is canonical for `alert_profiles.courses`; enforced at API write-time since 2026-05-28; CI guards scraper registry sync | 2026-05-27 (locked) / 2026-05-28 (enforced) | Format drift broke matching 3+ times; structural fix complete |
 | Founding 100 offer: first 100 subscribers get founding rate for first year, then roll to list price; "first 100" is marketing copy, not Stripe enforcement; closing the offer = unset FOUNDER_COUPON_ID | 2026-06-10 / amended 2026-06-11 | FOUNDINGYEAR coupon is uncapped (max_redemptions=null); urgency via unknown-remaining scarcity, no visible counter, no deadline |
 | No Stripe trial; subscriptions charge from day 1 | 2026-06-11 | Trial was redundant with the founding $4.99 rate and the free-tier alert; free alert is now the only free entry |
+| One registry key per physical course; Chronogolf preferred when a course is live on both platforms; CI fails on cross-platform duplicates | 2026-10-20 | The picker offered the same course twice (Goreway/Parkshore, Cardinal, Mill Run, Banty's Roost) and alerts could split across keys |
 
 ---
 
 ## Decision log
 
 Append-only. Most recent at top. Updated automatically by Claude Code draining ClickUp list `901327295790`.
+
+### 2026-10-20 (correction) — Railway deploys stalled from 2026-09-29: entries in that window describe code that was committed but not running
+
+**What happened.** The last successful deployments of both services (`spirited-youthfulness/web` and `resourceful-delight/worker`) are the 2026-09-29 12:23 builds. Pushes to `main` after that produced no deployment on either service: the 2026-09-29 registry-repair commits and docs commits, and all of the 2026-10-20 pushes. There were no failed, skipped or queued builds; Railway simply never created deployments. GitHub `main` was ahead of both services throughout.
+
+**Consequence (read the window as "committed, not running").** Every entry dated 2026-09-29 (after the 12:23 builds) through the redeploy describes code that was committed but not running: the Chronogolf registry repair, the Hornby Glen follow-ups after 12:23, the polling-cadence doc fix, and the 2026-10-20 Ontario expansion. Specifically: live `GET /courses` served the registry of the API build from 12:23 on 2026-09-29, which still contained the 40 removed Chronogolf entries, a deleted test fixture and the "DO NOT USE" Dragon's Fire entry; and the worker kept polling the pre-repair Chronogolf registry. Statements such as "now live for the first time" in the 2026-09-29 repair entry were not true until the redeploy.
+
+**Cause: not confirmed.** Two facts are established. (1) Railway's own status page shows a platform-wide pause of new builds starting 2026-10-20 17:03 UTC ("Deploys triggered during this period will need to be triggered again"), and `railway up` on 2026-10-20 was refused with "Deploys have been paused temporarily"; every 2026-10-20 push and deploy attempt fell inside that pause, so today's results say nothing about whether the GitHub trigger works. (2) The 2026-09-29 stall began at the time Railway was showing an incident, and Railway's rule that deploys triggered during an incident must be triggered again fits: nothing was re-triggered because nothing was pushed that fired. Whether the GitHub-to-Railway trigger itself also stopped working is unproven; it can only be tested once builds resume. Do not record "the trigger broke" as fact until that test is done.
+
+**Operating rule until the push trigger is verified.** After every push to either repo: run `railway deployment list` for the service; if no new deployment appears within a few minutes, deploy with `railway up` from a clean tree (`git archive <commit> | tar -x -C <dir>`, then `railway up --ci -p <project id> -s <service> -e production`). Verify the API deploy by `GET /courses` (count and a known new/removed slug) and the worker deploy by `scraper_health.last_heartbeat` still advancing. After builds resume, push one docs-only commit to each repo to find out whether the GitHub trigger fires; if not, reconnect the GitHub integration in Railway (Account → Integrations → GitHub, then each service's Source settings).
+
+**Where the redeploy stands.** Redeploy of both services with `railway up` was refused on 2026-10-20 while Railway's build pause was active and is outstanding at the time of writing. Live source of truth: `railway deployment list` for each service, `GET /courses`, and `scraper_health`. Tracked in ticket wdpu2yq9g7.
+
+### 2026-10-20 — One registry key per physical course (locked); duplicate pairs removed; CI duplicate check; 2026-09-29 removals re-checked
+
+**Decision (locked).** One registry key per physical course. When a course is live on more than one platform, Chronogolf is preferred. Seven same-course pairs registered on both Chronogolf and GolfNow were reduced to the Chronogolf key (Mill Run, Goreway/Parkshore, Banty's Roost, and the four Cardinal courses); the Chronogolf side of each was re-probed live first. Commits: foreward-api `4205a9f`, foreward-scraper `3754a00`. Dustin verified read-only in Supabase that no live alert referenced any course, so no alert was stranded.
+
+**CI.** `scripts/check_course_keys.py` now also fails when two keys on different platforms reduce to the same course (same site name, or same name-token set). Verified three ways: it flags exactly the seven pairs on the pre-removal registry, passes after removal, and fails when a duplicate is re-added. Genuine name collisions between different courses go in `ALLOWED_CROSS_PLATFORM_NAME_COLLISIONS` with a reason (Brookfield, Cambridge ON vs Brookfield, NS, is the first).
+
+**2026-09-29 removals re-checked against the full marketplace crawl.** All 40 clubs removed on 2026-09-29 are present in the full crawl, so the "8 not found in marketplace" in that entry was an artifact of a single unstable pagination pass. 29 still have `online_booking_enabled=False`, so those removals stand (for that reason, not "not found"). The rest were re-probed: those that passed are in the 2026-10-20 expansion; Westview Lakeland and Carlisle East returned empty; Riverside and Pickering Golf Club are in the second-tranche table. Table: `foreward-scraper/recon/ontario_chronogolf_tranche2_2026-10-20.md`.
+
+**Second Chronogolf tranche.** Courses found only by the full crawl were probed with the same method; results are in the same table and are awaiting Dustin's decision before any registry change. That table is the record, not this entry.
+
+### 2026-10-20 — Live site audit; ClickUp backlog reconciled
+
+A read-only audit of goodlie.golf (desktop and phone, signed in) found that live `/courses` and the alert picker offered courses the 2026-09-29 registry repair had removed, including a "DO NOT USE" entry and a deleted test fixture. Root cause: Railway deploys stalled from 2026-09-29 (see the deploy-stall correction entry). This is tracked in wdpu2yq9g7. Mobile layout defects in the alert form and history are filed as wdpu2yq9g8 and fold into the redesign.
+
+19 stale tickets were closed rather than deleted. Each has a comment citing the decision-log entry, live check or superseding work. Read signup volume, conversions and live alert state from Supabase (`auth.users`, `user_profiles`, `alert_profiles`, `sent_slots`), not from this doc.
 
 ### 2026-10-20 — Ontario course expansion: Chronogolf, GolfNow and Tee-on; push-triggered deploys found not firing
 
