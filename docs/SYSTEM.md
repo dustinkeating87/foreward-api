@@ -159,6 +159,36 @@ Backend changes do NOT belong in Lovable. Lovable holds only the frontend and on
 
 Append-only. Most recent at top. Updated automatically by Claude Code draining ClickUp list `901327295790`.
 
+### 2026-10-20 — Ontario course expansion: Chronogolf, GolfNow and Tee-on; push-triggered deploys found not firing
+
+**What changed.** Ontario courses within roughly 100 km of Toronto were added to the Chronogolf, GolfNow and Tee-on registries (`CHRONOGOLF_COURSES`, `GOLFNOW_COURSES`, `TEEON_COURSES` in the scraper; `foreward-api/app/util/courses.py`). Commits: foreward-api `cd486c5`, foreward-scraper `0019542`. `dunnys-divots` (a simulator, in no scraper) was removed from `courses.py`. Per-course results, IDs and fail reasons are in the probe tables, not here: `foreward-scraper/recon/ontario_expansion_probe_2026-10-20.md` (Chronogolf + GolfNow) and `foreward-scraper/recon/ontario_teeon_probe_2026-10-20.md` (Tee-on). The tables' totals rows are the counts of record.
+
+**Gate (locked rule, 2026-09-29).** A course was added only after a live probe through the scraper's own request path and proxy pool returned HTTP 200 with at least one slot on at least one date: 1 player, +1/+3/+6 days from the probe date, 1.5 s spacing, no direct fallback. Chronogolf used `_build_url` / `_normalize_slot` with each club's own `default_affiliation_type_id`; GolfNow used `_build_payload` / `API_URL` / `HEADERS`; Tee-on used the scraper's `_fetch_date_ss` / `_fetch_date_ss_ext` / `_fetch_date_atl` in that order, and the first flow that returned OK is the course's `flow`.
+
+**Candidate sources.** Chronogolf: the marketplace club listing, Ontario, within ~100 km, `online_booking_enabled=True`, not already registered. GolfNow: `docs/scrape_targets/ontario_candidates.json` (enumerated 2026-05-13, so facilities listed since are not covered) minus the registry, with distance, private and simulator flags taken from the live response. Tee-on: the directory is the `regionCourses` JS array embedded in the `WebBookingSearchSteps` page (the old participating-courses page is a redirect stub); `CourseGroupID` comes from the cookie set by `ComboLanding?CourseCode=…&FromCourseWebsite=true`.
+
+**Why entries failed or were not added** (counts: see the tables). Chronogolf: simulators, ranges, lessons and placeholder products (not probed); HTTP 422 "no tee times found"; empty 200; one "out of your booking range"; one unpublished. GolfNow: empty on all dates; persistent HTTP 500 on a few facilities; beyond 100 km; simulators, ranges and entertainment venues. Tee-on: empty after a clean fetch. Separately, PASS entries were not added when the same course was already registered on, or being added to, another platform (one platform per course; Chronogolf preferred when both are live).
+
+**Probe pass, public access unconfirmed (held out of the commit, per Dustin 2026-10-20).** Sleepy Hollow Country Club (Chronogolf), Caledon Country Club (Chronogolf), Guelph Country Club (GolfNow). **Held, documented private:** Spring Lakes Golf Club (3 courses; 2026-04-25 note says visitor booking returned 404, yet its default affiliation now returns slots, which may be a member affiliation). Add any of these only after public access is confirmed.
+
+**Decisions taken.** Re-adding slugs that were removed on 2026-09-29 is allowed; Dustin checked Supabase read-only and found no live alerts on any course, so no user is affected. Hornby Glen is registered on GolfNow, where it has public slots, even though it had none on Chronogolf. The six Tee-on courses with no geocode in Tee-on's directory were kept (distance unverified).
+
+**CI.** `scripts/check_course_keys.py` previously checked a fixed list of three registries and silently ignored `TEEON_COURSES`. It now auto-discovers every `*_COURSES` list in the scraper's root files, fails if an expected registry disappears, rejects duplicate keys, and checks each key's platform against `courses.py`. Display-name equality is still not enforced (three existing names use curly apostrophes in `courses.py`).
+
+**Chronogolf marketplace listing is unstable — read before trusting any "not in marketplace" result.** `GET /marketplace/clubs?page=N` returns pages in a different order on each request, so one pass over every page returns many duplicates and misses a large share of clubs (`per_page` is capped at 100). The 2026-09-29 repair used a single pass; its conclusions that clubs were "not found in marketplace" are unreliable (Lionhead and Lakeridge Links, removed on that basis, probe PASS again). Use repeated passes unioned by club id until the union stops growing, and check that every registered `club_id` is present. A second candidate tranche from the full crawl has not been probed yet. Proposed locked decision, not yet adopted: crawls must be multi-pass unions.
+
+**Deploys.** On 2026-10-20 pushes to `main` of both repos did not create Railway deployments. The last deployments of `spirited-youthfulness/web` and `resourceful-delight/worker` are both the 2026-09-29 12:23 builds, with no failed or skipped builds after them; GitHub `main` is ahead of both. Consequence: neither the 2026-09-29 registry repair nor the Ontario expansion is live until a deployment is made, and the live `GET /courses` still serves the pre-repair registry (ticket wdpu2yq9g7). Live source of truth: `railway deployment list` for each service and `GET /courses`.
+
+### 2026-06-13 (correction, recorded 2026-10-20) — PEI and Montague Chronogolf removal was not logged
+
+The 2026-06-13 NS+PEI onboarding entry says all new courses were live. About 70 minutes after that onboarding, foreward-scraper `85ad310` and foreward-api `8a496df` removed 21 of the Chronogolf entries: The Links at Montague (NS) and 20 PEI courses, because they returned an empty 200 on every date including tomorrow (the marketplace default `affiliation_type_id` was not the public visitor type). Only 4 PEI Chronogolf courses remain: Eagles Glenn, Fox Meadow, Mill River, Rustico. This was not part of the 2026-09-29 repair. Same root cause as 2026-09-29: the marketplace default affiliation is not always the visitor type, so per-club affiliation IDs and a live probe are required. The removed PEI courses may be recoverable with the per-club method; not attempted.
+
+### 2026-10-20 — Full visual redesign; prior design system retired
+
+Dustin retired the previous visual system for goodlie.golf entirely: palette, typography, editorial-poster references, and the homepage composition brief. The new direction is Braun / Dieter Rams inspired: clean, considered, low-clutter and instrument-like. Brand voice rules and the rule that "snipe" is internal-only are unchanged.
+
+Stage 1 inspiration board published as a private claude.ai artifact ("Good Lie Inspiration Board"). The new design spec will be written to the project files once locked, and this doc will point to it. Frozen visual tokens go in that spec, not in this doc.
+
 ### 2026-09-29 — Chronogolf GTA registry repair: 40 removed, 10 triples corrected, 8 picker-only courses activated
 
 Root cause of 45 GTA Batch 1 failures (added 2026-05-13): all 45 courses shared affiliation_type_id=5285 — Lionhead's public visitor type. Chronogolf affil IDs are per-club; 5285 is valid only for Lionhead. All 45 returned 422 "Player type provided is not valid" and had never been polled successfully.
