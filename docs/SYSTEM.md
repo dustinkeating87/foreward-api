@@ -160,6 +160,12 @@ Backend changes do NOT belong in Lovable. Lovable holds only the frontend and on
 
 Append-only. Most recent at top. Updated automatically by Claude Code draining ClickUp list `901327295790`.
 
+### 2026-10-25 — GitHub push trigger verified working on both Railway services; course-matching fix deployed
+
+**Answer to the open question in the 2026-10-20 operating rule.** Pushes to `main` create Railway deployments again on both services. Two `foreward-scraper` pushes (`f78627e`, `4341c3a`) each produced a `resourceful-delight/worker` deployment, and a docs-only `foreward-api` push (`ed52574`) produced a `spirited-youthfulness/web` deployment one second after the push. The GitHub integration did not need reconnecting. Why 2026-09-29 to 2026-10-20 produced no deployments is still unconfirmed; the Railway build pause fits, but that is inference.
+
+**Standing practice.** Keep the post-push `railway deployment list` check from the 2026-10-20 operating rule; fall back to `railway up` from a clean `git archive` tree only when no deployment appears. When two pushes land close together the first deployment is superseded (status REMOVED), so verify that the running deployment's commit contains the commit you care about, not that it equals it (`git merge-base --is-ancestor`). Verify worker deploys by `scraper_health.last_heartbeat` advancing across polls, API deploys by `GET /courses` when the registry changed.
+
 ### 2026-10-25 — Course matching is exact slug equality; containment/prefix/fuzzy matching retired (lakeview vs lakeview-house-golf-course)
 
 **Bug.** Alerts for `lakeview` (GolfNow, Mississauga) fired with `lakeview-house-golf-course` (Chronogolf) slots. Alerts stored the correct slug and the picker was not involved.
@@ -172,7 +178,7 @@ Append-only. Most recent at top. Updated automatically by Claude Code draining C
 
 **Blast radius.** A wrong-course fire writes `sent_slots` rows whose `slot_key` prefix is not in `alert_profiles.courses`, flips the alert to `fired`, and for a free-tier alert `fire_alert` stamps `user_profiles.free_tier_used_at` at delivery, so a mismatched fire consumes the free alert. Detect with: `sent_slots` where `split_part(slot_key,'|',1) <> ALL(alert_profiles.courses)`. Re-arming or un-stamping affected users is a manual decision by Dustin, never automatic.
 
-**Where it stands.** Code: `foreward-scraper` commits `f78627e` (fix) and `4341c3a` (docs) on `main`; no `foreward-api` code change. Deploy per the 2026-10-20 operating rule; live state is `railway deployment list` and `scraper_health.last_heartbeat`, and the deploy was outstanding at the time of writing (Railway CLI login expired).
+**Where it stands.** Code: `foreward-scraper` commits `f78627e` (fix) and `4341c3a` (docs) on `main`; no `foreward-api` code change. Deploy per the 2026-10-20 operating rule; live state is `railway deployment list` and `scraper_health.last_heartbeat`. The fix is deployed: the running `resourceful-delight/worker` commit is a descendant of `f78627e` (see the push-trigger entry above).
 
 ### 2026-10-20 (correction) — Railway deploys stalled from 2026-09-29: entries in that window describe code that was committed but not running
 
