@@ -160,6 +160,20 @@ Backend changes do NOT belong in Lovable. Lovable holds only the frontend and on
 
 Append-only. Most recent at top. Updated automatically by Claude Code draining ClickUp list `901327295790`.
 
+### 2026-10-25 — Course matching is exact slug equality; containment/prefix/fuzzy matching retired (lakeview vs lakeview-house-golf-course)
+
+**Bug.** Alerts for `lakeview` (GolfNow, Mississauga) fired with `lakeview-house-golf-course` (Chronogolf) slots. Alerts stored the correct slug and the picker was not involved.
+
+**Root cause (confirmed by a throwaway test against the real functions).** Course comparison was substring containment in two places: (1) poll-set selection — every `_course_has_alert` (`golfnow_scraper.py`, `chronogolf_scraper.py`, `teeon_scraper.py`) and `_gtg_course_has_alert` (`tee_sniper.py`) used `ac == key or ac in name or name in ac`; (2) slot matching — `slot_matches_profile` fell back to `_normalize_course` containment in both directions when slug equality failed. The fallback only logged a warning, so it was silent in practice. `foreward-api` has no equivalent logic (`_validate_courses` is set membership; `/scraper/mark-taken` and the admin course stats compare exactly).
+
+**Decision.** Course selection and slot matching use exact canonical-slug equality, implemented once in `course_match.py`. This is the 2026-05-27 lock ("slug is canonical; one-off matcher patches are retired") enforced in the matcher itself. A legacy identifier may resolve only through the explicit `COURSE_ALIASES` map (lowercased legacy string → exactly one slug). Never reintroduce substring, prefix or normalised-containment matching, and never re-add `_normalize_course`.
+
+**Guard.** `tests/test_course_matching.py` has a registry-wide property test: a slug alert for any course never selects or matches any other course, across every `*_COURSES` registry. A registry addition that violates it fails CI. The containment families found in the audit (each has its own regression test): `lakeview` / `lakeview-house-golf-course`, `bushwood` / `bushwood-golf-club-executive`, `kitchener-golf-doon-valley` / `kitchener-golf-doon-valley-classic-9`, `braeben` / `braeben-golf-country-club-academy-course`.
+
+**Blast radius.** A wrong-course fire writes `sent_slots` rows whose `slot_key` prefix is not in `alert_profiles.courses`, flips the alert to `fired`, and for a free-tier alert `fire_alert` stamps `user_profiles.free_tier_used_at` at delivery, so a mismatched fire consumes the free alert. Detect with: `sent_slots` where `split_part(slot_key,'|',1) <> ALL(alert_profiles.courses)`. Re-arming or un-stamping affected users is a manual decision by Dustin, never automatic.
+
+**Where it stands.** Code: `foreward-scraper` commits `f78627e` (fix) and `4341c3a` (docs) on `main`; no `foreward-api` code change. Deploy per the 2026-10-20 operating rule; live state is `railway deployment list` and `scraper_health.last_heartbeat`, and the deploy was outstanding at the time of writing (Railway CLI login expired).
+
 ### 2026-10-20 (correction) — Railway deploys stalled from 2026-09-29: entries in that window describe code that was committed but not running
 
 **What happened.** The last successful deployments of both services (`spirited-youthfulness/web` and `resourceful-delight/worker`) are the 2026-09-29 12:23 builds. Pushes to `main` after that produced no deployment on either service: the 2026-09-29 registry-repair commits and docs commits, and all of the 2026-10-20 pushes. There were no failed, skipped or queued builds; Railway simply never created deployments. GitHub `main` was ahead of both services throughout.
