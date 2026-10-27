@@ -153,12 +153,45 @@ Backend changes do NOT belong in Lovable. Lovable holds only the frontend and on
 | Founding 100 offer: first 100 subscribers get founding rate for first year, then roll to list price; "first 100" is marketing copy, not Stripe enforcement; closing the offer = unset FOUNDER_COUPON_ID | 2026-06-10 / amended 2026-06-11 | FOUNDINGYEAR coupon is uncapped (max_redemptions=null); urgency via unknown-remaining scarcity, no visible counter, no deadline |
 | No Stripe trial; subscriptions charge from day 1 | 2026-06-11 | Trial was redundant with the founding $4.99 rate and the free-tier alert; free alert is now the only free entry |
 | One registry key per physical course; Chronogolf preferred when a course is live on both platforms; CI fails on cross-platform duplicates | 2026-10-20 | The picker offered the same course twice (Goreway/Parkshore, Cardinal, Mill Run, Banty's Roost) and alerts could split across keys |
+| GolfNow capacity = alert.players must be in the allowed-size set parsed from all playerRule values (`Any` = 1-4); unparseable fails closed | 2026-10-27 | A `One` (1-spot) slot passed a 4-player alert: unmapped rules fell through to 1-4, only rate 0 was read and only the max compared. `Any` verified against GolfNow's own players=1..4 filters. See decision log. |
 
 ---
 
 ## Decision log
 
 Append-only. Most recent at top. Updated automatically by Claude Code draining ClickUp list `901327295790`.
+
+### 2026-10-27 — GolfNow capacity: alert.players must be in the allowed-size set parsed from all playerRule values; unparseable fails closed
+
+**Bug (ClickUp `wdpu2yqvk7`).** A 4-player alert fired on `remington-upper` 11:54, a tee time GolfNow labels `playerRule: "One"` (one spot). Root cause, confirmed from the live response (`recon/golfnow_remington_capacity_2026-10-27.json`): capacity came from a guessed `PLAYER_RULE_MAP`; any value not in it (`One`, `TwoThreeFour`, and later `Any`) fell through to `(1, 4)`, only `teeTimeRates[0]` was read, the matcher compared only the maximum, and the raw rule was never stored, so fires could not be audited. The search payload sends `players: 0`, so GolfNow does no filtering and the scraper has to decide capacity itself; that payload is unchanged.
+
+**Decision (locked).** A GolfNow slot's capacity is the union of the party sizes parsed from every `playerRule` on the tee time (each `teeTimeRates` entry plus the tee-time-level rule). `golfnow_scraper.parse_player_rule` is the only parser: CamelCase words `One`/`Two`/`Three`/`Four` are exactly the listed sizes (`TwoThreeFour` = {2,3,4}, `One` = {1}), `XToY` is the inclusive range, and `Any` = {1,2,3,4}. `Any` is the one non-CamelCase value; it is accepted because GolfNow's own `players=1..4` searches keep every `Any` tee time (checked live). Anything else parses to `None`. A slot matches only if `alert.players` is in the set. If no rule parses, the slot is skipped (fail closed), logged `[golfnow] unparseable playerRule <raw> for <course_key> <time>`, and counted in `_capacity_unparseable_counts["golfnow"]`. Chronogolf (exact `verified_players`), GTG and Tee-on matching are unchanged. Never reintroduce a lookup table with a default size range, a max-only comparison, or fail-open on GolfNow capacity.
+
+**Failing closed is silent to users.** An unknown rule value stops alerts for that course without any other symptom except the WARNING. After any GolfNow change, or if GolfNow adds a rule value, sweep every active GolfNow course through the scraper's request path and check that every `playerRule` parses. The 2026-10-27 sweep found these values: `TwoThreeFour`, `One`, `Two`, `OneTwo`, `OneTwoThree`, `TwoThree`, `TwoFour`, `Any`. `Any` was the one the original spec would have rejected; it was on a large share of tee times across dozens of courses, so shipping without it would have silenced them.
+
+**Auditability.** `sent_slots.capacity_raw` (text, nullable; migration `foreward-api/supabase/migrations/20261027_add_capacity_raw_to_sent_slots.sql`) holds the raw rule value(s) a GolfNow fire was decided on, comma-joined and deduplicated (for example `One,OneToFour`). Other platforms leave it null. `sent_slots.players` is still the alert's own party size echoed back, so it is not evidence of real capacity; use `capacity_raw`. Fires before 2026-10-27 have no raw rule and cannot be audited.
+
+**Guard.** `tests/test_golfnow_capacity.py` covers the parser, the matcher (including the multi-rate union), the `capacity_raw` write, and a fixture from the real Remington response; one test asserts our matcher agrees, slot for slot, with GolfNow's own `players=4` filter.
+
+**Out of scope, tracked in `wdpu2yqvk7`.** Alert `3c4f3427` had 11 Remington `sent_slots` stamped `taken_at` about a minute after firing (2026-10-27 00:10:57 to 00:12:00 UTC). Mark-taken ignores capacity, so the capacity bug does not explain it.
+
+**Where it stands.** Code: `foreward-scraper` `3c18b27`, `foreward-api` `3e9e0c4`, both on `main` and deployed (running commits verified). Column applied and verified in `information_schema.columns`. No impact report was run for earlier fires with too few spots; any GolfNow alert for two or more players was exposed before this fix.
+
+---
+
+### 2026-10-25 — Redesign visual direction locked (Swiss display + analog mechanic)
+
+Dustin locked the visual direction for the goodlie.golf redesign after four rounds of exploration. The base is Swiss display: a strict grid, heavy black rules, black and white plus one accent colour, and a real tee time set large as the hero. The site is animated by an analog mechanic. **Word flaps** are primary: whole-field Solari-style flaps for course, day, time and players, never letter-by-letter grids. **Rollers** (odometer-style) are also approved. Everything is flat 2D with no bevels, shadows or 3D. No red anywhere. The accent colour is still being explored.
+
+The alert builder's function is locked independently of the visuals: a Favourites tab, day keys, a window ruler, a players switch, and a live summary panel.
+
+Rejected along the way: letter-grid split-flap (unreadable), drawn knobs (clunky), the red accent, and the warm-grey minimal look (stale).
+
+Pointer: the design record lives in the Good Lie Golf project files (`claude/good-lie-design-direction.md`). Visual tokens get frozen there, not in this doc.
+
+(Queued as ClickUp task `wdpu2yqqat`; drained 2026-10-27.)
+
+---
 
 ### 2026-10-25 — GitHub push trigger verified working on both Railway services; course-matching fix deployed
 
