@@ -188,3 +188,29 @@ def test_total_insert_failure_still_fires_with_zero_written():
     assert data["fired"] is True
     assert data["slots_written"] == 0
     assert data["slots_failed"] == 1
+
+
+def test_capacity_raw_is_stored_when_sent_and_omitted_when_not():
+    """GolfNow fires carry the raw playerRule(s) into sent_slots.capacity_raw; other platforms send none."""
+    mock_db = _make_db()
+    with patch("app.main.supabase_admin", mock_db), \
+         patch("app.main.settings") as mock_settings:
+        mock_settings.export_api_key = API_KEY
+        from app.main import app
+        client = TestClient(app)
+        r = client.post(
+            "/scraper/fire-alert",
+            json={
+                "alert_id": "eee",
+                "slots": [
+                    {"slot_key": "remington-upper|2026-10-30T11:54:00|18", "players": 4,
+                     "capacity_raw": "One,OneToFour"},
+                    {"slot_key": "HV|12:10:00|18", "players": 4},
+                ],
+            },
+            headers={"X-Api-Key": API_KEY},
+        )
+    assert r.status_code == 200
+    rows = mock_db.insert.call_args_list[0].args[0]
+    assert rows[0]["capacity_raw"] == "One,OneToFour"
+    assert "capacity_raw" not in rows[1]

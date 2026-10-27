@@ -335,6 +335,7 @@ class FireAlertSlot(BaseModel):
     course_name: Optional[str] = None
     tee_time: Optional[str] = None
     players: Optional[int] = None
+    capacity_raw: Optional[str] = None   # GolfNow only: raw playerRule value(s), comma-joined
 
 
 class FireAlertBody(BaseModel):
@@ -364,6 +365,8 @@ def fire_alert(body: FireAlertBody, x_api_key: Optional[str] = Header(default=No
             row["tee_time"] = slot.tee_time
         if slot.players is not None:
             row["players"] = slot.players
+        if slot.capacity_raw:
+            row["capacity_raw"] = slot.capacity_raw
         if body.scanned_at:
             row["scanned_at"] = body.scanned_at
         rows.append(row)
